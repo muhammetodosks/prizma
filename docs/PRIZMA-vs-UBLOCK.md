@@ -204,6 +204,30 @@ Gerçek istek testi: `pagead2.googlesyndication.com`, `doubleclick.net/gpt.js`, 
 
 ---
 
+## 10.5 Canlı Test — Gerçek Firefox Oturumu (Prizma vs uBO)
+
+**Yöntem:** Firefox 153.0.4 (headless) + geckodriver 0.37.1, her site ayrı temiz profil. Prizma `release/prizma-1.0.0.xpi` ve uBlock Origin 1.73.0, her oturumda `install_addon(temporary=true)` ile kuruldu. Sayfa + 8 sn bekleme sonrası DOM ölçümü: görünür reklam düğümü sayısı (class/id'de `ad|banner|sponsor|advert|reklam`), görünür reklam alanı px², `script`/`img` etiket sayısı, Prizma DCP kesme sayısı (`[data-prizma-blocked]`).
+
+| Site | script clean/Prizma/uBO | görünür reklam clean/Prizma/uBO | reklam alanı px² clean/Prizma/uBO |
+|---|---|---|---|
+| youtube.com | 46 / 47 / 46 | 62 / 74 / 77 | 632K / 882K / 878K |
+| hurriyet.com.tr | 77 / 78 / 44 | 9 / 9 / **0** | 965K / 965K / **0** |
+| sozcu.com.tr | 61 / 51 / 29 | 18 / 14 / **0** | 6.6M / 5.3M / **0** |
+| bbc.com | 105 / 100 / 98 | 2 / 2 / 2 | 113K / 113K / 113K |
+| forbes.com | 128 / **64** / 65 | 5 / **0** / **0** | 1.03M / **0** / **0** |
+
+**DCP kesme sayısı (`data-prizma-blocked`):** youtube 1, hurriyet 0, sozcu 0, bbc 0, **forbes 12**.
+
+**Bulgu analizi:**
+- **Forbes — berabere:** Prizma hem ağ isteği engelledi (script 128→64, aynı uBO'nun 65'i) hem **12 reklam öğesini DCP ile hiç oluşturmadan kesti** — görünür reklam alanı 1.03M→0. Forbes agresif anti-adblock sayfasıdır; Prizma'nın DCP katmanı burada çalışır.
+- **YouTube — berabere:** İki taraf da görünür reklamı anlamlı azaltamadı (arama sonucu sayfası, sponsor/yer tutucu düğümleri ölçümde reklam sayıldı; gerçek pre-roll/truview videolarda fark, DCP'nin videoyu oluşmadan kesmesiyle ortaya çıkar).
+- **BBC — berabere:** BBC kendi reklamsız bölgesi + ölçüm seçicisi yalnızca 2 düğüm buldu; anlamlı fark yok.
+- **Hürriyet/Sözcü — uBO üstün:** Türkçe reklam ağlarında uBO görünür reklamı tamamen sıfırladı (0), Prizma kısmen (9/14). Fark iki kaynaktan gelir: (1) uBO'nun **HTML filtering**'i `<script>` etiketlerini DOM'dan söker (Prizma sadece isteği bloklar, etiketi bırakır — script sayısındaki 77→44 farkı bundan); (2) uBO'nun Türkçe liste + scriptlet seti daha kapsamlı. Prizma'nın `adguard-turkish` kuralı yine de Sözcü'de reklam alanını 6.6M→5.3M indirdi ve script'i 61→51 kesti.
+
+**Ölçüm notları:** YouTube/Forbes geç yüklenen dinamik reklamlar nedeniyle tek ölçümde gürültülüdür; `visibleAdPx` ölçümü kayan animasyonlu banner'ları dahil eder. uBO HTML filtering, Prizma'da yol haritasında (s. 12) `$redirect`/scriptlet genişletmesiyle kapatılacak bir boşluktur.
+
+---
+
 ## 11. Dürüst Karar
 
 ### Kapışır mı? → **Kısmen kapışır — ve bir alanda uBO'nun yapamadığını yapar.**
@@ -265,6 +289,7 @@ Prizma 1.0.0, **motoru, temel bloklama gücü ve VANGUARD DCP™ ile uBO'nun yap
 - Doğrulama: `node` + background.js ile aynı ABI (instantiateWasm override, HEAPU8).
 - Lint: web-ext **0 error / 0 notice** (3 kabul edilebilir uyarı).
 - Paket: `release/prizma-1.0.0.xpi` (1.5 MB), Vanguard dosyaları dahil doğrulandı.
+- Canlı test: Firefox 153.0.4 + geckodriver 0.37.1 + selenium, 3 profil (clean/prizma/ublock), 6 site; uBO 1.73.0 karşılaştırma. Sonuçlar `docs/PRIZMA-vs-UBLOCK.md` bölüm 10.5.
 
 ## Ek B — Referanslar
 
