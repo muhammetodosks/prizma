@@ -1,0 +1,19 @@
+{
+  "extName": { "message": "Prizma", "description": "Extension name" },
+  "extDescription": {
+    "message": "Fast, privacy-first ad/tracker blocker with a C++ WASM engine",
+    "description": "Extension description"
+  },
+  "togglePaused": {
+    "message": "Toggle Prizma on/off",
+    "description": "Keyboard shortcut description"
+  },
+  "popupTitle": { "message": "Prizma" },
+  "blockedTotal": { "message": "Requests blocked" },
+  "listCount": { "message": "filter rules" },
+  "pausedOn": { "message": "Prizma is paused" },
+  "pausedOff": { "message": "Prizma is active" },
+  "openDashboard": { "message": "Dashboard" },
+  "openLogger": { "message": "Logger" },
+  "openOptions": { "message": "Options" }
+}

@@ -1,0 +1,19 @@
+{
+  "extName": { "message": "Prizma", "description": "Eklenti adı" },
+  "extDescription": {
+    "message": "C++ WASM motorlu, hızlı ve gizlilik odaklı reklam/tracker engelleyici",
+    "description": "Eklenti açıklaması"
+  },
+  "togglePaused": {
+    "message": "Prizma'yı etkinleştir/devre dışı bırak",
+    "description": "Klavye kısayolu açıklaması"
+  },
+  "popupTitle": { "message": "Prizma" },
+  "blockedTotal": { "message": "Engellenen istek" },
+  "listCount": { "message": "filtre kuralı" },
+  "pausedOn": { "message": "Prizma duraklatıldı" },
+  "pausedOff": { "message": "Prizma etkin" },
+  "openDashboard": { "message": "Panel" },
+  "openLogger": { "message": "Logger" },
+  "openOptions": { "message": "Ayarlar" }
+}

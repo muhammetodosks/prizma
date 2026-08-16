@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">P</div>
+      <div>
+        <h1 id="title">Prizma</h1>
+        <span id="state" class="state active">Prizma etkin</span>
+      </div>
+    </div>
+    <label class="switch" title="Prizma'yı duraklat">
+      <input type="checkbox" id="pauseToggle">
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <section class="cards">
+    <div class="card">
+      <div class="card-value" id="blockedTotal">0</div>
+      <div class="card-label">engellenen istek</div>
+    </div>
+    <div class="card">
+      <div class="card-value" id="filterCount">0</div>
+      <div class="card-label">filtre kuralı</div>
+    </div>
+    <div class="card">
+      <div class="card-value" id="sinceDays">0</div>
+      <div class="card-label">gündür aktif</div>
+    </div>
+  </section>
+
+  <section class="cards vanguard">
+    <div class="card shield">
+      <div class="card-value" id="guardHosts">0</div>
+      <div class="card-label">VANGUARD korumalı host</div>
+    </div>
+    <div class="card shield">
+      <div class="card-value" id="vanguardBlocked">0</div>
+      <div class="card-label">DCP önlenen öğe</div>
+    </div>
+  </section>
+
+  <nav>
+    <a href="#" id="btnLogger" class="nav-btn">Logger</a>
+    <a href="#" id="btnOptions" class="nav-btn">Panel</a>
+    <a href="#" id="btnSettings" class="nav-btn">Ayarlar</a>
+  </nav>
+
+  <script src="popup.js"></script>
+</body>
+</html>

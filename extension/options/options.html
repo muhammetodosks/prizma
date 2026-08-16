@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Prizma — Panel</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">P</div>
+      <div>
+        <h1>Prizma</h1>
+        <span class="subtitle">Reklam ve tracker engelleyici</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="btnLogger" class="btn ghost">Logger</button>
+      <label class="switch" title="Prizma'yı duraklat">
+        <input type="checkbox" id="pauseToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </header>
+
+  <!-- İstatistik kartları -->
+  <section class="grid stats">
+    <div class="stat-card">
+      <div class="stat-value accent" id="statBlocked">0</div>
+      <div class="stat-label">Toplam engellenen</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statToday">0</div>
+      <div class="stat-label">Bugün engellenen</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statTotal">0</div>
+      <div class="stat-label">İncelenen istek</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statRules">0</div>
+      <div class="stat-label">Filtre kuralı</div>
+    </div>
+    <div class="stat-card vanguard-stat">
+      <div class="stat-value accent2" id="statVanguardHosts">0</div>
+      <div class="stat-label">VANGUARD korumalı host</div>
+    </div>
+    <div class="stat-card vanguard-stat">
+      <div class="stat-value accent2" id="statVanguardBlocked">0</div>
+      <div class="stat-label">DCP önlenen öğe</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Filtre listeleri</h2>
+    <div id="listsBox" class="lists"></div>
+    <div class="panel-actions">
+      <button id="btnUpdateLists" class="btn">Listeleri güncelle</button>
+      <span id="updateStatus" class="dim"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Özel filtreler</h2>
+    <p class="hint">Kendi filtre kuralların (uBO/ABP sözdizimi). Bir satıra bir kural.</p>
+    <textarea id="customFilters" rows="6" placeholder="example.com##.reklam-banner&#10;||tracker.example^$third-party"></textarea>
+    <div class="panel-actions">
+      <button id="btnSaveCustom" class="btn">Özel filtreleri kaydet</button>
+      <span id="customStatus" class="dim"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Gelişmiş korumalar</h2>
+    <div class="setting">
+      <div>
+        <strong>CNAME cloaking engelleme</strong>
+        <p class="hint">DNS üzerinden gizlenen tracker alan adlarını tespit edip engeller (best-effort).</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="cnameCloaking" checked><span class="slider"></span></label>
+    </div>
+    <div class="setting">
+      <div>
+        <strong>Referrer kırpma</strong>
+        <p class="hint">Giden isteklerde referrer'ı sadece kök adrese indirir.</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="stripReferrer"><span class="slider"></span></label>
+    </div>
+    <div class="setting">
+      <div>
+        <strong>Üçüncü taraf çerezlerini kırp</strong>
+        <p class="hint">Üçüncü taraf isteklerinde çerez başlığını kaldırır.</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="stripCookies3p"><span class="slider"></span></label>
+    </div>
+    <div class="setting">
+      <div>
+        <strong>Cosmetic filtreler</strong>
+        <p class="hint">Sayfa içi reklam öğelerini gizler. Kapalıysa yalnızca ağ engelleme çalışır.</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="cosmeticEnabled" checked><span class="slider"></span></label>
+    </div>
+    <div class="setting vanguard">
+      <div>
+        <strong>VANGUARD DCP™</strong>
+        <p class="hint">Deterministic Creation-Prevention: reklam öğesini DOM'da HİÇ oluşturmadan engeller (uBO gibi gizlemez — hiç var etmez). Prototip seviyesinde src/innerHTML/appendChild kesintisi. Tüm filtrelere karşı etkin, µs hızlı.</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="vanguardEnabled" checked><span class="slider"></span></label>
+    </div>
+  </section>
+
+  <footer>
+    <span class="dim" id="engineInfo"></span>
+  </footer>
+</div>
+<script src="options.js"></script>
+</body>
+</html>
