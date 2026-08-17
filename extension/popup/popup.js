@@ -28,6 +28,10 @@ async function refresh() {
     const warn = $('aggressiveWarn');
     if (warn) warn.style.display = agg.checked ? 'block' : 'none';
   }
+  const dbg = $('debugToggle');
+  if (dbg) {
+    dbg.checked = !!(state.settings && state.settings.debugMode);
+  }
   const el = $('state');
   el.textContent = state.paused ? 'Prizma duraklatıldı' : 'Prizma etkin';
   el.className = 'state ' + (state.paused ? 'paused' : 'active');
@@ -81,6 +85,29 @@ $('aggressiveToggle').addEventListener('change', async (ev) => {
   await browser.runtime.sendMessage({ type: 'setSetting', key: 'aggressiveMode', value: ev.target.checked });
   const warn = $('aggressiveWarn');
   if (warn) warn.style.display = ev.target.checked ? 'block' : 'none';
+  refresh();
+});
+
+$('debugToggle').addEventListener('change', async (ev) => {
+  await browser.runtime.sendMessage({ type: 'setSetting', key: 'debugMode', value: ev.target.checked });
+});
+
+$('btnUpdateLists').addEventListener('click', async (ev) => {
+  const btn = $('btnUpdateLists');
+  const st = $('updateState');
+  btn.disabled = true;
+  st.textContent = 'İndiriliyor…';
+  try {
+    const r = await browser.runtime.sendMessage({ type: 'updateLists' });
+    const counts = (r && r.counts) || {};
+    const total = (counts.net || 0) + (counts.regex || 0) + (counts.cosmetic || 0);
+    st.textContent = (r && r.ok) ? '✓ ' + (r.updated || 0) + ' liste · ' + fmtCount(total) + ' kural' : '✗ hata';
+  } catch (e) {
+    st.textContent = '✗ hata';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { st.textContent = ''; }, 5000);
+  }
   refresh();
 });
 

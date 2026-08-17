@@ -61,6 +61,7 @@ const Prizma = (() => {
 
   function loadList(text) {
     if (!Module || !text) return;
+    invalidateMatchCache();
     // heapStr UTF-8 byte dizisi üretir; C++ tarafına GERÇEK BYTE uzunluğu
     // verilmelidir. text.length UTF-16 birim sayar — Türkçe (ı,ş,ğ,ü,ö,ç)
     // ve diğer çok baytlı karakterler içeren listelerde byte uzunluğundan
@@ -75,6 +76,7 @@ const Prizma = (() => {
 
   function clear() {
     if (Module) Module._prizma_clear();
+    invalidateMatchCache();
   }
 
   function counts() {
@@ -90,8 +92,31 @@ const Prizma = (() => {
   // JS-Native RegExp motoru: C++'ın derleyemediği (lookahead vb.) regex'ler
   // burada native RegExp ile değerlendirilir. Sonuç WASM sonucuyla önceliğe
   // göre birleştirilir: 3=allow_imp > 2=block_imp > 1=allow > 0=block.
+  //
+  // P7 — match önbelleği: aynı (url,type,doc,third) tuşu tekrar geldiğinde
+  // WASM çağrısı + regex taraması atlanır. Tuş TAM eşleşme gerektirdiğinden
+  // sonuç her zaman aynıdır; clear()/loadList sonrası sıfırlanır. LRU boyutu
+  // sabit (4096) — bellek patlaması yok.
+  const MATCH_CACHE_MAX = 4096;
+  const matchCache = new Map();
+  let matchCacheKey = ''; // clear/loadList sırasında çürütülür
+  let guardCache = null;  // {key, json} — yalnızca liste yüklemesi sonrası yeniden üretilir
+
+  function invalidateMatchCache() {
+    matchCacheKey = String(Date.now());
+    matchCache.clear();
+    guardCache = null;
+  }
+
   function match(url, typeBit, hostname, docHostname, thirdParty) {
     lastRegexRule = '';
+    const cacheKey = matchCacheKey + '\u0001' + url + '\u0001' + typeBit + '\u0001' +
+      (hostname || '') + '\u0001' + (docHostname || '') + '\u0001' + (thirdParty ? 1 : 0);
+    const hit = matchCache.get(cacheKey);
+    if (hit !== undefined) {
+      if (hit.rule) lastRegexRule = hit.rule;
+      return hit.action;
+    }
     if (!Module) return -1;
     const up = heapStr(url);
     const hp = heapStr(hostname || '');
@@ -101,18 +126,23 @@ const Prizma = (() => {
     freePtr(up); freePtr(hp); freePtr(dp);
 
     const reg = regexMatch(url, typeBit, hostname || '', docHostname || '', thirdParty);
+    let result = action;
     if (reg) {
       if (reg.priority > priority) {
         lastRegexRule = reg.raw;
-        return reg.action;
-      }
-      if (reg.priority === priority && priority >= 0) {
+        result = reg.action;
+      } else if (reg.priority === priority && priority >= 0) {
         // eşit öncelik: allow (0) kazanır — exception, bloktan üstündür
         lastRegexRule = reg.raw;
-        return (reg.action === 0 || action === 0) ? 0 : 1;
+        result = (reg.action === 0 || action === 0) ? 0 : 1;
       }
     }
-    return action;
+    if (matchCache.size >= MATCH_CACHE_MAX) {
+      const oldest = matchCache.keys().next().value;
+      matchCache.delete(oldest);
+    }
+    matchCache.set(cacheKey, { action: result, rule: lastRegexRule });
+    return result;
   }
 
   function lastRule() {
@@ -239,15 +269,19 @@ const Prizma = (() => {
   }
 
   // Guard indeksini JSON dizesi olarak döndürür (content script DCP dağıtımı)
+  // B10: AdGuard Tracking (~197K satır) eklendi → guard export 5.8MB oldu;
+  //      4MB cap JSON'u KESİYORDU → DCP boş kalıyordu. Cap 32MB.
   function guardExport() {
     if (!Module) return null;
-    const cap = 4 * 1024 * 1024;
+    if (guardCache && guardCache.key === matchCacheKey) return guardCache.json;
+    const cap = 32 * 1024 * 1024;
     const buf = Module._malloc(cap);
     const len = Module._prizma_guard_export(buf, cap);
     if (len <= 0) { Module._free(buf); return null; }
     const u8 = mem();
     const s = dec.decode(u8.subarray(buf, buf + len));
     Module._free(buf);
+    guardCache = { key: matchCacheKey, json: s };
     return s;
   }
 

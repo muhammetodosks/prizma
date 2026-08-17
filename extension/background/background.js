@@ -31,7 +31,8 @@ const PrizmaBG = (() => {
     aggressiveMode: false,
     loggerKeep: 500,
     autoUpdateLists: true,
-    updateIntervalHours: 24
+    updateIntervalHours: 6,
+    debugMode: false
   };
 
   const LIST_SOURCES = [
@@ -39,7 +40,9 @@ const PrizmaBG = (() => {
     { id: 'easyprivacy',     name: 'EasyPrivacy',      file: 'lists/easyprivacy.txt',      url: 'https://easylist.to/easylist/easyprivacy.txt',   enabled: true },
     { id: 'ublock-filters',  name: 'uBO filters',      file: 'lists/ublock-filters.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt', enabled: true },
     { id: 'ublock-unbreak',  name: 'uBO unbreak',      file: 'lists/ublock-unbreak.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt', enabled: true },
-    { id: 'adguard-turkish', name: 'Türkçe (AdGuard)', file: 'lists/adguard-turkish.txt',  url: 'https://filters.adtidy.org/extension/ublock/filters/13.txt', enabled: true }
+    { id: 'adguard-turkish', name: 'Türkçe (AdGuard)', file: 'lists/adguard-turkish.txt',  url: 'https://filters.adtidy.org/extension/ublock/filters/13.txt', enabled: true },
+    { id: 'adguard-tracking', name: 'Tracking (AdGuard)', file: 'lists/adguard-tracking.txt', url: 'https://filters.adtidy.org/extension/ublock/filters/3.txt', enabled: true },
+    { id: 'prizma-hardcore', name: 'Prizma Hardcore',  file: 'lists/prizma-hardcore.txt',  url: null, enabled: true }
   ];
 
   let ready = false;
@@ -62,6 +65,13 @@ const PrizmaBG = (() => {
   // yollarından sızan bu hostları DOM seviyesinde de keser.
   const webBlockedHosts = new Set();
   const WEB_BLOCKED_MAX = 4000;
+
+  // B10: getGuard serialize önbelleği — guard 5.8MB'a büyüdü; webBlockedHosts
+  // değişmedikçe birleştirilmiş JSON yeniden üretilmez.
+  let guardJson = null; // {key, json}
+  function guardMergeKey() {
+    return Prizma.counts().net + '|' + webBlockedHosts.size;
+  }
 
   // ── Yardımcılar ──────────────────────────────────────────────────────────
   function hostnameOf(url) {
@@ -192,8 +202,13 @@ const PrizmaBG = (() => {
   }
 
   function pushLog(entry) {
+    // P8 — debug modu: motor sonucu her istek için kaydedilir (engellenmese de).
     logBuffer.push(entry);
     if (logBuffer.length >= 200) flushLog();
+  }
+  function pushDebugLog(entry) {
+    if (!settings.debugMode) return;
+    pushLog({ t: Date.now(), ...entry, debug: true });
   }
   function flushLog() {
     if (!logBuffer.length) return;
@@ -262,6 +277,7 @@ const PrizmaBG = (() => {
   async function updateListsRemote() {
     let updated = 0;
     for (const src of LIST_SOURCES) {
+      if (!src.url) continue; // yerel paket listesi (prizma-hardcore) çevrimiçi değil
       try {
         const text = await fetchText(src.url);
         const cacheKey = 'listdata.' + src.id;
@@ -310,7 +326,10 @@ const PrizmaBG = (() => {
     const siteMode = siteModeFor(pageHost);
     if (siteMode === 'noop') return {};
     if (siteMode === 'allow') return {};  // B9: izin ver — hiçbir şey engelleme
-    const thirdParty = isThirdParty(details.url, docUrl);
+    // B11: main_frame ASLA third-party olamaz — documentUrl boş olduğunda
+    // isThirdParty() true dönerdi ve `||site^$third-party` kuralları ana sayfayı
+    // engelliyordu ("hiçbir site açılmıyor"). Ana çerçeve kendi başlatıcısıdır.
+    const thirdParty = type === 'main_frame' ? false : isThirdParty(details.url, docUrl);
     const lower = details.url.toLowerCase();
 
     // Agresif mod: kurala bakmadan tüm üçüncü taraf script/iframe/font/object
@@ -367,6 +386,8 @@ const PrizmaBG = (() => {
       pushLog({ t: Date.now(), type, url: details.url, rule: Prizma.lastRule(), action: 'block', host: hostname, doc: docHost, thirdParty });
       return { cancel: true };
     }
+    // P8 — debug: eşleşme yoksa da kaydet (hangi filtreler çalışmadı analizi)
+    pushDebugLog({ type, url: details.url, rule: Prizma.lastRule() || '(yok)', action: 'pass', host: hostname, doc: docHost, thirdParty });
     return {};
   }
 
@@ -465,15 +486,21 @@ const PrizmaBG = (() => {
         // Çifte kalkan: ağ katmanında engellenen hostlar `w` olarak eklenir,
         // böylece DCP statik HTML yollarından sızan hostları da keser.
         if (!settings.vanguardEnabled) return { json: null };
-        let json = Prizma.guardExport();
+        // B10: 5.8MB guard JSON'u her getGuard'da parse+stringify etmek ağır;
+        //      webBlockedHosts değişmedikçe önceden birleştirilmiş JSON'u döndür.
+        if (guardJson && guardJson.key === guardMergeKey()) return { json: guardJson.json };
+        const json = Prizma.guardExport();
+        if (!json) return { json: null };
+        let merged = json;
         if (webBlockedHosts.size > 0) {
           try {
             const g = JSON.parse(json);
             g.w = Array.from(webBlockedHosts).map((h) => [h, 0xFFFFFFFF]);
-            json = JSON.stringify(g);
+            merged = JSON.stringify(g);
           } catch (e) { /* guard değiştirilemezse olduğu gibi geç */ }
         }
-        return { json };
+        guardJson = { key: guardMergeKey(), json: merged };
+        return { json: merged };
       }
       case 'vanguardStats': {
         const blocked = Math.max(0, Math.min(10000, msg.blocked | 0));

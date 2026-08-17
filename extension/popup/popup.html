@@ -32,6 +32,22 @@
     ⚠ Dikkat: Agresif modda üçüncü taraf script/iframe/font/object istekleri kurala bakılmadan engellenir. Bazı sitelerde işlevsellik bozulabilir.
   </div>
 
+  <div class="agg-row">
+    <label class="agg-label" for="debugToggle" title="Hangi filtrelerin çalıştığını, hangi isteklerin engellendiğini/geçtiğini detaylı logla">
+      Debug modu
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="debugToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="agg-row update-row">
+    <button class="update-btn" id="btnUpdateLists" title="Tüm filtre listelerini sıfırdan indirip motoru yeniden başlat">
+      Listeleri Güncelle
+    </button>
+    <span class="update-state" id="updateState"></span>
+  </div>
+
   <section class="cards">
     <div class="card">
       <div class="card-value" id="blockedTotal">0</div>

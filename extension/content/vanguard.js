@@ -26,6 +26,10 @@
   let allowTbl = new Map();   // hostname → mask
   let webBlockTbl = new Map(); // ağ katmanında engellenen hostlar (çifte kalkan)
   let urlRules = [];          // [host, path, mask]
+  // B10: urlRules — host → { allow:[], block:[] } indeksi. 13K kuralı her
+  // checkUrl'de lineer taramak binlerce öğede milyonlarca işlem yapıyordu;
+  // host bazlı bakılınca tek `get` + suffix zinciri yeterli.
+  let urlRuleIndex = null;
   let ready = false;
   let blockedCount = 0;
   let reportTimer = null;
@@ -40,6 +44,17 @@
     return m;
   }
 
+  function buildUrlRuleIndex() {
+    const idx = new Map();
+    for (const u of urlRules) {
+      const h = u.host;
+      let node = idx.get(h);
+      if (!node) { node = { allow: [], block: [] }; idx.set(h, node); }
+      node[u.allow ? 'allow' : 'block'].push(u);
+    }
+    urlRuleIndex = idx;
+  }
+
   function loadGuard(json) {
     try {
       const g = JSON.parse(json);
@@ -49,6 +64,7 @@
       urlRules = (g.u || []).map((u) => ({
         host: u[0], path: u[1], mask: u[2], allow: u[3] === 1
       }));
+      buildUrlRuleIndex();
       ready = true;
     } catch (e) {
       ready = false;
@@ -94,34 +110,49 @@
     return s === -1 ? url : url.slice(0, s);
   }
 
+  // srcset="url1 1x, url2 2x" — her adayı ayrı ayrı kontrol et; biri engelli
+  // ise srcset'in tamamı düşer (hiçbir varyant yüklenmez). Descriptor
+  // (1x, 2x, 480w) dikkate alınmaz.
+  function checkSrcset(value, mask) {
+    if (!value) return -1;
+    const parts = value.split(',');
+    for (const part of parts) {
+      const token = part.trim().split(/\s+/)[0];
+      if (!token || !/^https?:/i.test(token)) continue;
+      const r = checkUrl(token, mask);
+      if (r === 1) return 1;
+    }
+    return -1;
+  }
+
   function checkUrl(url, mask) {
     if (!ready || !url) return -1;
     const host = cleanHost(hostOf(url));
     if (!host) return -1;
     const h = checkHost(host, mask);
     if (h !== -1) return h;
-    // yol önek kuralları
+    // yol önek kuralları — yalnızca ilgili host'un (ve üst hostların) listesine bak
     const scheme = url.indexOf('://');
     const start = scheme === -1 ? 0 : scheme + 3;
     const slash = url.indexOf('/', start);
     if (slash === -1) return -1;
     const path = url.slice(slash);
-    // exception path kuralları önce
-    for (const u of urlRules) {
-      if (!u.allow) continue;
-      if (!(u.mask === G_ANY || (u.mask & mask))) continue;
-      if (host.endsWith(u.host) &&
-          (host.length === u.host.length ||
-           host[host.length - u.host.length - 1] === '.') &&
-          path.startsWith(u.path)) return 0;
-    }
-    for (const u of urlRules) {
-      if (u.allow) continue;
-      if (!(u.mask === G_ANY || (u.mask & mask))) continue;
-      if (host.endsWith(u.host) &&
-          (host.length === u.host.length ||
-           host[host.length - u.host.length - 1] === '.') &&
-          path.startsWith(u.path)) return 1;
+    let hh = host;
+    while (hh) {
+      const node = urlRuleIndex && urlRuleIndex.get(hh);
+      if (node) {
+        for (const u of node.allow) {
+          if (!(u.mask === G_ANY || (u.mask & mask))) continue;
+          if (path.startsWith(u.path)) return 0;
+        }
+        for (const u of node.block) {
+          if (!(u.mask === G_ANY || (u.mask & mask))) continue;
+          if (path.startsWith(u.path)) return 1;
+        }
+      }
+      const dot = hh.indexOf('.');
+      if (dot === -1) break;
+      hh = hh.slice(dot + 1);
     }
     return -1;
   }
@@ -233,7 +264,11 @@
     } catch (e) {}
   }
 
-  // 2) setAttribute → src/data/data-src/href engelli ise set yapılmaz
+  // 2) setAttribute → src/data/data-src/href/srcset/data-original vb. engelli ise set yapılmaz
+  const URL_ATTRS = new Set(['src', 'data', 'data-src', 'data-srcset', 'href',
+    'data-original', 'data-lazy-src', 'data-lazy', 'data-srcs', 'data-url',
+    'data-href', 'poster', 'data-poster', 'xlink:href', 'data-bg',
+    'data-background', 'background', 'imagesrcset', 'srcset']);
   function patchSetAttribute() {
     const elProto = window.Element && Element.prototype;
     if (!elProto) return;
@@ -244,12 +279,20 @@
     try {
       elProto.setAttribute = function (name, value) {
         const n = String(name).toLowerCase();
+        const isUrlAttr = URL_ATTRS.has(n);
         const mask = n === 'src' ? maskForTag(this) : G_ANY;
-        if ((n === 'src' || n === 'data' || n === 'data-src' || n === 'href') &&
-            typeof value === 'string' && value && checkUrl(value, mask) === 1) {
-          markBlocked(this, value, mask);
-          try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
-          return;
+        if (isUrlAttr && typeof value === 'string' && value) {
+          let verdict;
+          if (n === 'srcset' || n === 'imagesrcset' || n === 'data-srcset') {
+            verdict = checkSrcset(value, mask);
+          } else {
+            verdict = checkUrl(value, mask);
+          }
+          if (verdict === 1) {
+            markBlocked(this, value, mask);
+            try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
+            return;
+          }
         }
         if (n === 'src' && this.__prizmaBlocked) {
           try { delete this.__prizmaBlocked; } catch (e) {}
@@ -272,14 +315,47 @@
         return;
       }
     }
+    if (root && root.nodeType === 1 && root.hasAttribute && root.hasAttribute('srcset')) {
+      const v = root.getAttribute('srcset');
+      if (v && checkSrcset(v, G_IMAGE) === 1) {
+        markBlocked(root, v, G_IMAGE);
+        purgeBlocked(root);
+        try { root.removeAttribute('srcset'); } catch (e) {}
+        return;
+      }
+    }
     if (!root || !root.querySelectorAll) return;
     let found;
-    try { found = root.querySelectorAll('img[src],script[src],iframe[src],video[src],audio[src],source[src],embed[src],object[data],img[data-src],script[data-src]'); } catch (e) { return; }
+    try {
+      found = root.querySelectorAll(
+        'img[src],script[src],iframe[src],video[src],audio[src],source[src],' +
+        'embed[src],object[data],img[data-src],script[data-src],img[srcset],' +
+        'source[srcset],img[data-srcset],iframe[data-src],img[data-original],' +
+        'video[poster],div[data-bg],div[data-background],iframe[data-src],' +
+        'a[href],link[href],img[data-lazy-src]'
+      );
+    } catch (e) { return; }
     for (const el of found) {
-      const attr = el.hasAttribute('src') ? 'src' : (el.hasAttribute('data') ? 'data' : 'data-src');
-      const v = el.getAttribute(attr);
+      const tag = (el.tagName || '').toLowerCase();
       const m = maskForTag(el);
-      if (v && checkUrl(v, m) === 1) {
+      let attr = null;
+      if (tag === 'a' || tag === 'link') attr = 'href';
+      else if (el.hasAttribute('srcset')) attr = 'srcset';
+      else if (el.hasAttribute('data-srcset')) attr = 'data-srcset';
+      else if (el.hasAttribute('src')) attr = 'src';
+      else if (el.hasAttribute('data')) attr = 'data';
+      else if (el.hasAttribute('data-src')) attr = 'data-src';
+      else if (el.hasAttribute('data-original')) attr = 'data-original';
+      else if (el.hasAttribute('poster')) attr = 'poster';
+      else if (el.hasAttribute('data-bg')) attr = 'data-bg';
+      else if (el.hasAttribute('data-background')) attr = 'data-background';
+      else if (el.hasAttribute('data-lazy-src')) attr = 'data-lazy-src';
+      else continue;
+      const v = el.getAttribute(attr);
+      if (!v) continue;
+      const isMulti = (attr === 'srcset' || attr === 'data-srcset');
+      const verdict = isMulti ? checkSrcset(v, m) : checkUrl(v, m);
+      if (verdict === 1) {
         markBlocked(el, v, m);
         purgeBlocked(el);
         try { el.removeAttribute(attr); } catch (e) {}
@@ -346,6 +422,31 @@
     }
   }
 
+  // srcset özel setter — srcset="url 1x, url 2x" liste halinde; engelli aday
+  // varsa setter hiç yazmaz. (HTMLImageElement / HTMLSourceElement)
+  function patchSrcsetSetter(proto) {
+    let desc;
+    try { desc = Object.getOwnPropertyDescriptor(proto, 'srcset'); } catch (e) { return; }
+    if (!desc || !desc.set) return;
+    const origSet = desc.set;
+    const origGet = desc.get;
+    try {
+      Object.defineProperty(proto, 'srcset', {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get() { return origGet ? origGet.call(this) : ''; },
+        set(v) {
+          if (typeof v === 'string' && v && checkSrcset(v, G_IMAGE) === 1) {
+            markBlocked(this, v, G_IMAGE);
+            try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
+            return; // srcset HİÇ yazılmaz → hiçbir varyant yüklenmez
+          }
+          try { origSet.call(this, v); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+  }
+
   function applyPatches() {
     patchSrcSetter(window.HTMLImageElement && HTMLImageElement.prototype, 'src', G_IMAGE);
     patchSrcSetter(window.HTMLScriptElement && HTMLScriptElement.prototype, 'src', G_SCRIPT);
@@ -355,6 +456,8 @@
     patchSrcSetter(window.HTMLEmbedElement && HTMLEmbedElement.prototype, 'src', G_MEDIA);
     patchSrcSetter(window.HTMLObjectElement && HTMLObjectElement.prototype, 'data', G_MEDIA);
     patchSrcSetter(window.HTMLLinkElement && HTMLLinkElement.prototype, 'href', G_ANY);
+    patchSrcsetSetter(window.HTMLImageElement && HTMLImageElement.prototype);
+    patchSrcsetSetter(window.HTMLSourceElement && HTMLSourceElement.prototype);
     patchSetAttribute();
     patchAppend();
     patchInnerHTML();
@@ -372,20 +475,21 @@
   }
 
   let guardRefresh = 0;
+  // B10: guard 6.1MB'a büyüdü (AdGuard Tracking 151K host) — 6 kez yeniden
+  // alıp parse etmek ana thread'i sayfa başına saniyelerce donduruyordu
+  // ("hiçbir site açılmıyor"). Tek tazeleme yeterli: ilk guard'ı statik DOM
+  // taraması için al, ardından webBlockedHosts (`w`) güncel gelir.
   window.addEventListener('message', (ev) => {
     const d = ev.data;
     if (!d || d.prizmaVanguard !== true) return;
     if (d.type === 'guardData' && typeof d.json === 'string') {
       loadGuard(d.json);
       if (ready) scanInserted(document.documentElement);
-      // Çifte kalkan gecikmesi: webRequest blokları asenkron birikir; guard'ı
-      // birkaç kez tazele ki statik HTML script/iframe etiketleri de kaldırılsın
-      // (uBO HTML filtering eşdeğeri). Her tazelemede mevcut DOM yeniden taranır.
       guardRefresh++;
-      if (guardRefresh < 6) {
+      if (guardRefresh < 2) {
         setTimeout(() => {
           window.postMessage({ prizmaVanguard: true, type: 'getGuard' }, '*');
-        }, 1000);
+        }, 800);
       }
     }
   });

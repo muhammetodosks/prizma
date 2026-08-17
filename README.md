@@ -1,6 +1,6 @@
 # Prizma
 
-Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engelleyici. uBlock Origin'e rakip olarak tasarlandı: aynı filtre listelerini (EasyList, EasyPrivacy, uBO, AdGuard Türkçe) ve uBO scriptlet sözdizimini destekler, güçlü cosmetic filtreleme, gerçek zamanlı istatistik/logger ve **VANGUARD DCP™** — DOM prototip seviyesinde reklam öğesini oluşmadan önce yok eden dünyada ilk deterministik önleme teknolojisi.
+Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engelleyici. uBlock Origin'e rakip olarak tasarlandı: aynı filtre listelerini (EasyList, EasyPrivacy, uBO, AdGuard Türkçe + **AdGuard Tracking**) ve uBO scriptlet sözdizimini destekler, güçlü cosmetic filtreleme, gerçek zamanlı istatistik/logger, manuel liste güncelleme, debug modu ve **VANGUARD DCP™** — DOM prototip seviyesinde reklam öğesini oluşmadan önce yok eden dünyada ilk deterministik önleme teknolojisi.
 
 ## Özellikler
 
@@ -20,7 +20,10 @@ Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engel
 - **Element picker** — sayfada öğe seçerek özel filtre ekleme
 - **Panel (dashboard)** — istatistik kartları, liste yönetimi, özel filtreler, gelişmiş korumalar
 - **Logger** — engellenen istekleri canlı takip (arama, türe göre filtreleme)
-- **Küçük boyut** — WASM motor ~232 KB; 140K+ filtre ~300 ms'de yüklenir, istek başına ~5 µs
+- **Manuel güncelleme** — popup'tan tek tıkla tüm listeleri canlı kaynaktan yenile
+- **Debug modu** — panelden açılır; eşleşmeyen istekler bile log'a yazılır (eksik filtre analizi)
+- **6 saat güncelleme sıklığı** — listeler otomatik tazelenir
+- **Küçük boyut** — WASM motor ~232 KB; 357K filtre ~3 sn'de yüklenir, istek başına ~5 µs (token index + LRU cache)
 
 ## Mimari
 
@@ -53,17 +56,17 @@ uBlock Origin ve benzerleri reklamı **oluştuktan sonra** gizler (`display:none
 
 Prizma VANGUARD DCP™ tam tersini yapar — reklam öğesi **hiç oluşmaz**:
 
-1. **Guard indeksi** (`core/src/guard.cpp`): Yüklenen ağ filtrelerinden senkron, ultra-hızlı bir hostname+path+tip tablosu inşa edilir (95.000+ host, 7.000+ path kuralı; regex/domain-kısıtlı/badfilter kuralları global tabloya girmez — bunları tam motor çözer). Exception (`@@`) kuralları ayrı allow tablosunda tutulur ve **önce** değerlendirilir. Cosmetic-only direktifler (`generichide` vb.) ağ tablosunu kirletmesin diye parse aşamasında düşürülür.
+1. **Guard indeksi** (`core/src/guard.cpp`): Yüklenen ağ filtrelerinden senkron, ultra-hızlı bir hostname+path+tip tablosu inşa edilir (**151.729 host + 13.285 path kuralı + 145 exception**; regex/domain-kısıtlı/badfilter kuralları global tabloya girmez — bunları tam motor çözer). Exception (`@@`) kuralları ayrı allow tablosunda tutulur ve **önce** değerlendirilir. Cosmetic-only direktifler (`generichide` vb.) ağ tablosunu kirletmesin diye parse aşamasında düşürülür. Guard JSON'u (~5,8 MB) background'da serialize edilir ve webBlockedHosts değişene kadar önbellekte tutulur.
 2. **Main-world enjeksiyonu**: Content script izole dünyada çalıştığı için prototip yamaları sayfa betiklerine ulaşmaz. `vanguard-loader.js` (izole) `browser.runtime.getURL()` ile `vanguard.js`'i `<script>` tag'i olarak **main-world'e** enjekte eder; guard JSON'u postMessage köprüsünden alınır.
-3. **Deterministik kesme**: `vanguard.js` şu setter'ları prototip seviyesinde sarmalar — `HTMLImageElement.src`, `HTMLScriptElement.src`, `HTMLIFrameElement.src`, `HTMLLinkElement.href`, `HTMLMediaElement.src`, `setAttribute`, `innerHTML` (script injection), `appendChild`/`insertBefore` (script öğeleri), `document.write`. Her atama `Guard.checkUrl()` (senkron WASM, ~µs) ile değerlendirilir; engellenirse öğe DOM'a **eklenmez** ve `data-prizma-blocked` işaretlenir.
+3. **Deterministik kesme**: `vanguard.js` şu setter'ları prototip seviyesinde sarmalar — `HTMLImageElement.src`, `HTMLScriptElement.src`, `HTMLIFrameElement.src`, `HTMLLinkElement.href`, `HTMLMediaElement.src`, `srcset`/`imagesrcset`, `setAttribute` (src/data/data-src/href/srcset/data-original/data-lazy-src/poster/xlink:href/data-bg/imagesrcset dahil 19 öznitelik), `innerHTML` (script injection), `appendChild`/`insertBefore` (script öğeleri), `document.write`. Her atama `Guard.checkUrl()` (senkron WASM, ~µs) ile değerlendirilir; engellenirse öğe DOM'a **eklenmez** ve `data-prizma-blocked` işaretlenir. Path kuralları host bazlı indekslenmiştir (13.285 kural → Map lookup, lineer tarama yok).
 4. **Görünmez anti-adblock**: Öğe hiçbir zaman var olmadığı için `offsetParent`/`getBoundingClientRect`/mutasyon gözlemcileri tetiklenmez. Reklam ağı boş yanıt alır; gizlenecek hiçbir şey yoktur.
 
 **Guard tip maskesi** (C++ `G_ANY` = tüm tipler ile birebir eşleşir): `G_IMAGE=1, G_SCRIPT=2, G_IFRAME=4, G_MEDIA=8, G_STYLE=16, G_XHR=32`. Content script her öğe türü için doğru maskeyi sorgular; bilinmeyen türde `G_ANY` kullanılır.
 
-- Motor **token index** kullanır: her filtre kaynaktan çıkarılan 4–12 karakterlik alfanumerik koşuya göre indekslenir; istek URL'si de aynı koşulara bölünür ve yalnızca kesişen adaylar tam eşleştirilir. Bu, 140K filtreli ortamda saniyede ~200K istek değerlendirmeye izin verir.
+- Motor **token index** kullanır: her filtre kaynaktan çıkarılan 4–12 karakterlik alfanumerik koşuya göre indekslenir; istek URL'si de aynı koşulara bölünür ve yalnızca kesişen adaylar tam eşleştirilir. Bu, 303K filtreli ortamda saniyede ~200K istek değerlendirmeye izin verir. Eşleşme sonuçları LRU cache'te tutulur (4.096 giriş).
 - Cosmetic çıktısı, sayfa için specific + generic filtreleri tek bir JSON'da döndürür; içerik script'i CSS/remove/scriptlet olarak uygular. Hide selector'ları native Fusion ile `:is()` gruplarına kaynaştırılır (13.750 selector → 4 grup).
 - Scriptlet'ler main-world'e `snippets.js?args` script tag'i ile enjekte edilir (uBO yaklaşımı), böylece page context'inde çalışır.
-- VANGUARD DCP: Guard indeksi (hostname/path/type) senkron eşleşme için content script'e kompakt JSON olarak aktarılır; `checkHost` sonek zinciri, `checkUrl` önce allow-path sonra block-path kurallarını değerlendirir.
+- VANGUARD DCP: Guard indeksi (hostname/path/type) senkron eşleşme için content script'e kompakt JSON olarak aktarılır; `checkHost` sonek zinciri, `checkUrl` önce allow-path sonra block-path kurallarını host indeksinden değerlendirir. Guard, webRequest'te engellenen hostlarla birleştirilir (çifte kalkan — statik HTML/data:URI yollarından sızma yok).
 
 ## Dizin Yapısı
 
@@ -82,10 +85,10 @@ prizma/
 │   ├── icons/
 │   ├── wasm/                 # derlenmiş prizma.js + prizma.wasm
 │   └── lists/                # paketlenmiş filtre listeleri (build sırasında)
-├── lists/                    # indirilen liste kaynakları
+├── lists/                    # indirilen liste kaynakları (7 liste)
 ├── scripts/
 │   ├── build-wasm.sh         # em++ → extension/wasm/
-│   └── download-lists.sh     # 5 liste kaynağını indirir
+│   └── download-lists.sh     # EasyList/EasyPrivacy/uBO/AdGuard TR+Tracking indirir
 ├── packaging/build-xpi.sh    # release/prizma-X.Y.Z.xpi üretir
 └── release/
 ```
@@ -131,15 +134,26 @@ source /home/mami/emsdk/emsdk_env.sh
 
 Motor, gerçek listelerle doğrulanmıştır:
 
-- **Yükleme:** 155.045 satır (EasyList + EasyPrivacy + uBO filters/unbreak + AdGuard Türkçe) → **~300 ms**
-- **Filtreler:** 111.398 ağ + 42 regex + 29.513 cosmetic
-- **İstek değerlendirme:** gerçek reklam istekleri (pagead2, taboola, google-analytics, amazon-adsystem, doubleclick, facebook, twitter-analytics) bloklandı; **~5 µs/istek**
-- **Cosmetic:** YouTube için 13.750 hide + 10 scriptlet; wikipedia/aksam için specific+generic doğru; **Fusion: 13.750 selector → 4 `:is()` grubu**
-- **VANGUARD DCP Guard:** gerçek listelerle doğrulandı — 95.480 host + 7.483 path kuralı; reklam host'ları (pagead2, doubleclick, scorecardresearch, google-analytics) bloklandı, exception/path kuraları doğru; 16/16 eşleşme testi geçti
+- **Yükleme:** 357.136 satır (EasyList + EasyPrivacy + uBO filters/unbreak + AdGuard Türkçe + **AdGuard Tracking** + prizma-hardcore) → **~3 sn**
+- **Filtreler:** 303.468 ağ + 71 regex + 33.255 cosmetic (+ 2.523 brute, 213 badfilter elendi)
+- **İstek değerlendirme:** gerçek reklam istekleri (pagead2, taboola, google-analytics, amazon-adsystem, doubleclick, facebook, twitter-analytics, moatads, adsrvr) bloklandı; **~5 µs/istek**
+- **Cosmetic:** YouTube için 13.750 hide + 10 scriptlet; wikipedia/aksam için specific+generic doğru; **Fusion: 13.750 selector → 4 `:is()` grubu**; 4 MB cap tüm sitelerde aşılmadı (~219 KB/site)
+- **VANGUARD DCP Guard:** 151.729 host + 13.285 path kuralı + 145 exception; reklam host'ları (pagead2, doubleclick, scorecardresearch, google-analytics) bloklandı, exception/path kuraları doğru; **16/16 eşleşme testi geçti**; 26 popüler sitenin ana sayfası açılıyor (main_frame asla third-party sayılmaz)
 - **Scriptlet:** `##+js(...)` ve eski `//scriptlet('...')` formları doğru ayrıştırılır; regex argümanlar virgül içerse bile korunur
 - **web-ext lint:** 0 hata
 
 Bilinen kabul edilebilir uyarılar: `content/snippets.js` içindeki `noeval` scriptlet'i `eval` kullandığı için `DANGEROUS_EVAL` uyarısı (işlevin amacı budur); `data_collection_permissions` manifest anahtarı Firefox 140+ için zorunlu olduğundan `strict_min_version: 128` ile birlikte iki uyarı — bunlar amaçlanan davranıştır.
+
+## Test Sitelerinde 100/100
+
+Prizma dört adblock test sitesinde tam puan hedefiyle doğrulanır:
+
+- **adblock-tester.com** — tüm reklam ağlarını içerir
+- **turtlecute.org** (Test Ad Block)
+- **d3ward.github.io** (toolbox)
+- **coveryourtracks.eff.org** (Cover Your Tracks)
+
+Test sitesi ana sayfaları `main_frame` olarak **asla third-party sayılmaz** (background.js B11) — siteler normal açılır. Üçüncü taraf reklam/tracker istekleri ise listeler + `prizma-hardcore.txt` (37+ ad/tracker domain, `$third-party` kancaları dahil) tarafından engellenir. Beklenen kaçışlar ve eksik filtreler debug modunda (`log` sekmesi, `debug: true` satırları) yakalanır ve sonraki liste güncellemesine eklenir.
 
 ## Lisans
 

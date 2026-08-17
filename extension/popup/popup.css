@@ -150,3 +150,25 @@ nav { display: grid; gap: 6px; }
   border-radius: 8px;
   margin-bottom: 10px;
 }
+/* P8 — Debug toggle satırı (agresif satırından ayrı görünüm) */
+#debugToggle + .slider { background: var(--border); }
+.agg-row:has(#debugToggle) .agg-label { color: var(--text); }
+/* P5 — Liste güncelleme butonu */
+.update-row {
+  margin-bottom: 10px;
+}
+.update-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.update-btn:hover { opacity: 0.85; }
+.update-btn:disabled { opacity: 0.5; cursor: wait; }
+.update-state { font-size: 11px; color: var(--text-dim); margin-left: 8px; white-space: nowrap; }
