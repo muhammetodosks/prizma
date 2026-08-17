@@ -564,3 +564,47 @@ Module._prizma_load_list(p, text.length);      // text.length = UTF-16 kod birim
 | JS syntax | `node --check` — tüm JS dosyaları temiz |
 | Native test | `tests/test_engine.cpp` — **183 geçti, 0 başarısız** |
 | JS köprü testi | Node harness — **9/9 geçti** (lookbehind, priority birleştirme) |
+---
+
+## 16. Firefox AMO Yayın Hazırlığı (v1.0.0)
+
+### 16.1 AMO Gereksinimleri (2026 itibarıyla)
+
+- **Manifest V2 kabul ediliyor**: Firefox MV2'yi desteklemeye devam ediyor (uBlock Origin vb. için
+  `blockingWebRequest` korunuyor). MV3'e geçiş **reddedildi**: MV3'te background "event page" olur,
+  `persistent: true` kaldırılır → WASM motoru + yüklü 140K+ filtre suspend'ta kaybolur, engelleme kesilir.
+- **`data_collection_permissions` zorunlu** (3 Kasım 2025'ten beri yeni eklentiler): manifest'te
+  `gecko.data_collection_permissions.required = ["none"]` — Prizma veri toplamaz.
+- **`gecko.id`**: `prizma@mami.local` (MV2'de önerilir, AMO ilk imzada benzersizlik kontrolü yapar).
+- **web-ext lint**: **0 hata, 0 notice, 12 uyarı** (10× `DANGEROUS_EVAL` = snippets.js'teki bilinçli
+  `new Function` scriptlet motoru; 2× `KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION` = `data_collection_permissions`
+  min. 140 gerektirir, veri toplamadığımız için eski sürümlerde zararsız şekilde yok sayılır).
+
+### 16.2 Manifest İyileştirmeleri
+
+- `author` + `developer` + `homepage_url` eklendi (AMO listing'de görünür).
+- `gecko_android` bloğu eklendi (strict_min_version 120.0, aynı veri toplama beyanı) — AMO Android desteği.
+- Mevcut izinler korundu: `webRequest`, `webRequestBlocking`, `tabs`, `storage`, `unlimitedStorage`,
+  `contextMenus`, `dns`, `alarms`, `<all_urls>`.
+
+### 16.3 Privacy Policy (canlı)
+
+- **URL**: https://muhammetodosks.github.io/prizma/PRIVACY.html (HTTP 200)
+- TR+EN çift dil, tek dosya: `docs/PRIVACY.md`
+- Public repo: https://github.com/muhammetodosks/prizma (GitHub Pages `/docs` branch)
+
+### 16.4 AMO Başvuru Paketi (Downloads)
+
+| Dosya | Açıklama |
+|-------|----------|
+| `prizma-1.0.0.xpi` | Normal sürüm (1,653,012 bayt) — aggressiveMode: false |
+| `prizma-1.0.0-aggressive.xpi` | Agresif sürüm (1,653,012 bayt) — aggressiveMode: true |
+| `prizma-1.0.0-source.zip` | AMO kaynak paketi (6,893,307 bayt) — C++ kaynakları + build talimatı |
+
+### 16.5 AMO'ya Yükleme Adımları (manuel)
+
+1. https://addons.mozilla.org/developers/ → "Yeni eklenti" → prizma-1.0.0.xpi yükle
+2. Kaynak kodu bölümünde prizma-1.0.0-source.zip'ı yükle (WASM machine-generated → AMO ister)
+3. Privacy policy: https://muhammetodosks.github.io/prizma/PRIVACY.html
+4. Listing'de: kategori "Privacy & Security", homepage: https://github.com/muhammetodosks/prizma
+5. `data_collection_permissions ["none"]` doğrulandığı için veri toplama onay ekranı gösterilmez
