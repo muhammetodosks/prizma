@@ -121,6 +121,7 @@ void Engine::load_list(const std::string& text) {
       rf.src = f.regex_src;
       rf.is_exception = f.is_exception;
       rf.is_important = f.is_important;
+      rf.match_case = f.match_case;
       rf.type_bits = f.type_bits;
       rf.party = f.party;
       rf.has_party = f.has_party;
@@ -131,7 +132,23 @@ void Engine::load_list(const std::string& text) {
       for (auto& t : toks) {
         if (t.size() > best.size()) best = t;
       }
-      rf.token = best.size() >= 4 ? best : std::string();
+      // url_subruns küçük harf ürettiği için token da küçük harf olmalı,
+      // yoksa büyük harf içeren regex kaynakları token ön-filtresinde
+      // asla aday olamaz (sessiz false-negative).
+      rf.token = best.size() >= 4 ? to_lower_ascii(best) : std::string();
+      // RegExp'i yükleme zamanında BİR KEZ derle — her istekte std::regex
+      // kurmak O(100) regex için ciddi CPU israfı. uBO/JS regex'lerinin
+      // desteklediği lookahead/lookbehind/named-group gibi yapılar
+      // std::regex'te derlenemez → re_ok=false → JS-Native RegExp motoruna
+      // devredilir (regex_export_json ile dışa aktarılır).
+      try {
+        rf.re = std::regex(rf.src, rf.match_case ? std::regex::ECMAScript
+                                                 : std::regex::ECMAScript |
+                                                       std::regex::icase);
+        rf.re_ok = true;
+      } catch (const std::regex_error&) {
+        rf.re_ok = false;
+      }
       regexes_.push_back(std::move(rf));
       continue;
     }
@@ -210,6 +227,7 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
                                   bool third_party) const {
   ++matches_;
   MatchResult res;
+  last_priority_ = -1;
   if (nets_.empty() && brute_.empty() && regexes_.empty()) return res;
 
   const std::string url = to_lower_ascii(url_in);
@@ -231,6 +249,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
   const NetworkFilter* allow_rule = nullptr;
   const NetworkFilter* block_imp = nullptr;
   const NetworkFilter* allow_imp = nullptr;
+  // $removeparam: engelleme değil, query parametresi temizleme.
+  // Engelleme/exception kararından BAĞIMSIZ tutulur; eşleşen ilk kural
+  // son aşamada raporlanır (gerçek blok varsa blok kazanır).
+  const NetworkFilter* prune_rule = nullptr;
 
   auto evaluate = [&](const NetworkFilter& nf) {
     if (filter_cancelled(nf)) return;
@@ -239,6 +261,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
         nf.match_case ? url_in : url, hn, nf.pattern, nf.anchor_start,
         nf.anchor_end, nf.hostname_anchor).matched;
     if (!m) return;
+    if (nf.has_remove_param) {
+      if (!prune_rule) prune_rule = &nf;
+      return;
+    }
     if (nf.is_exception) {
       if (nf.is_important) {
         if (!allow_imp) allow_imp = &nf;
@@ -290,12 +316,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
         }
       }
       if (cancelled) continue;
-      try {
-        std::regex re(rf.src);
-        if (!std::regex_search(url, re)) continue;
-      } catch (const std::regex_error&) {
-        continue;
-      }
+      // C++'ta derlenemeyen (lookahead vb.) regex'ler JS-Native RegExp
+      // motoruna devredilir — burada sessizce atlanmaz.
+      if (!rf.re_ok) continue;
+      if (!std::regex_search(url, rf.re)) continue;
       if (rf.is_exception) {
         if (rf.is_important) {
           if (!allow_imp_re) { allow_imp_re = true; allow_imp_re_raw = rf.raw; }
@@ -313,12 +337,16 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.action = 0;
     res.rule_raw = allow_imp ? allow_imp->raw : allow_imp_re_raw;
     res.from_regex = allow_imp == nullptr;
+    res.priority = 3;
+    last_priority_ = 3;
     return res;
   }
   if (block_imp || block_imp_re) {
     res.action = 1;
     res.rule_raw = block_imp ? block_imp->raw : block_imp_re_raw;
     res.from_regex = block_imp == nullptr;
+    res.priority = 2;
+    last_priority_ = 2;
     ++blocked_;
     return res;
   }
@@ -326,13 +354,28 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.action = 0;
     res.rule_raw = allow_rule ? allow_rule->raw : allow_re_raw;
     res.from_regex = allow_rule == nullptr;
+    res.priority = 1;
+    last_priority_ = 1;
     return res;
   }
   if (block_rule || block_rule_re) {
     res.action = 1;
     res.rule_raw = block_rule ? block_rule->raw : block_re_raw;
     res.from_regex = block_rule == nullptr;
+    res.priority = 0;
+    last_priority_ = 0;
     ++blocked_;
+    return res;
+  }
+
+  // 5) $removeparam: blok/exception yoksa query temizleme kuralını raporla.
+  //    Eşleşen kural arka planda isteği iptal ETMEZ; sadece parametreleri
+  //    ayıklar (redirectUrl ile). Engelleme önceliği her zaman kazanır.
+  if (prune_rule) {
+    res.action = 1;
+    res.rule_raw = prune_rule->raw;
+    res.priority = 0;
+    last_priority_ = 0;
     return res;
   }
   return res;
@@ -422,9 +465,12 @@ std::string Engine::cosmetic_json(const std::string& hostname_in) const {
     append_json_escape(out, s);
     out += "\"";
   };
-  auto flush_fuse = [&](bool last) {
+  // :is() birleştirme — her çağrıda mevcut grubu EMIT eder ve boşaltır.
+  // B1: 128 eşiği döngü içinde push sonrası kontrol edilir; ayrıca
+  // fusable olmayan selector'a geçişte bekleyen grup asla kaybolmaz
+  // (önceki hata: <128 elemanlı grup build edilip çöpe atılıyordu).
+  auto flush_fuse = [&]() {
     if (fuse_sel.empty()) return;
-    // :is() birleştirme — ayrılmış virgüller selector'ları ayırır
     std::string group;
     group += ":is(";
     for (size_t i = 0; i < fuse_sel.size(); ++i) {
@@ -432,15 +478,15 @@ std::string Engine::cosmetic_json(const std::string& hostname_in) const {
       group += fuse_sel[i];
     }
     group += ")";
-    if (last || fuse_sel.size() >= 128) {
-      emit_raw(group);
-      fuse_sel.clear();
-    }
+    emit_raw(group);
+    fuse_sel.clear();
   };
 
   auto can_fuse = [](const std::string& s) {
     // virgül, pseudo-element ve prosedürel operatörler füzyondan çıkarılır
     if (s.find(',') != std::string::npos) return false;
+    if (s.find(":style(") != std::string::npos) return false;
+    if (s.find('{') != std::string::npos) return false;
     if (s.find(":has(") != std::string::npos) return false;
     if (s.find(":xpath(") != std::string::npos) return false;
     if (s.find(":contains(") != std::string::npos) return false;
@@ -451,26 +497,27 @@ std::string Engine::cosmetic_json(const std::string& hostname_in) const {
     return true;
   };
 
-  // tek tek emit etmek yerine topla: önce exception'ları topla
-  std::set<std::string> hide_except_set;
-  for (const auto* c : specific) if (c->is_exception) hide_except_set.insert(c->selector);
-  for (const auto* c : generic) if (c->is_exception) hide_except_set.insert(c->selector);
-  hide_except = std::move(hide_except_set);
+  // tek tek emit etmek yerine topla: exception selector'ları hide_except'te
+  // (yukarıda) toplandı — tekrar hesaplamaya gerek yok.
 
   // specific + generic hide selector'larını topla (fusion + bireysel karışık)
   for (const auto* c : specific) {
     if (c->is_exception || c->kind != C_HIDE) continue;
     if (hide_except.count(c->selector)) continue;
-    if (can_fuse(c->selector)) fuse_sel.push_back(c->selector);
-    else { flush_fuse(false); emit_raw(c->selector); }
+    if (can_fuse(c->selector)) {
+      fuse_sel.push_back(c->selector);
+      if (fuse_sel.size() >= 128) flush_fuse();
+    } else { flush_fuse(); emit_raw(c->selector); }
   }
   for (const auto* c : generic) {
     if (c->is_exception || c->kind != C_HIDE) continue;
     if (hide_except.count(c->selector)) continue;
-    if (can_fuse(c->selector)) fuse_sel.push_back(c->selector);
-    else { flush_fuse(false); emit_raw(c->selector); }
+    if (can_fuse(c->selector)) {
+      fuse_sel.push_back(c->selector);
+      if (fuse_sel.size() >= 128) flush_fuse();
+    } else { flush_fuse(); emit_raw(c->selector); }
   }
-  flush_fuse(true);
+  flush_fuse();
 
   out += "],\"remove\":[";
   first = true;
@@ -531,10 +578,13 @@ std::string Engine::cosmetic_json(const std::string& hostname_in) const {
   };
   for (const auto* c : specific) {
     if (c->is_exception || c->kind != C_STYLE) continue;
+    // B4: #@#...:style( exception'ı aynı selector'ı iptal etmeli
+    if (hide_except.count(c->selector)) continue;
     emit_style(*c);
   }
   for (const auto* c : generic) {
     if (c->is_exception || c->kind != C_STYLE) continue;
+    if (hide_except.count(c->selector)) continue;
     emit_style(*c);
   }
 
@@ -595,6 +645,50 @@ std::string Engine::cosmetic_json(const std::string& hostname_in) const {
   }
 
   out += "]}";
+  return out;
+}
+
+std::string Engine::regex_export_json() const {
+  std::string out;
+  out += "[";
+  bool first = true;
+  for (const auto& rf : regexes_) {
+    // C++ std::regex'in derleyebildiği (re_ok) filtreler WASM tarafında
+    // zaten eşleştirilir; JS'e yalnızca derlenemeyenler devredilir —
+    // çifte değerlendirme ve çifte sayaç olmaz.
+    if (rf.re_ok) continue;
+    if (!first) out += ",";
+    first = false;
+    out += "{\"s\":\"";
+    append_json_escape(out, rf.src);
+    out += "\",\"raw\":\"";
+    append_json_escape(out, rf.raw);
+    out += "\",\"e\":";
+    out += rf.is_exception ? "1" : "0";
+    out += ",\"i\":";
+    out += rf.is_important ? "1" : "0";
+    out += ",\"m\":";
+    out += rf.match_case ? "1" : "0";
+    out += ",\"t\":";
+    out += std::to_string(rf.type_bits);
+    out += ",\"p\":";
+    out += std::to_string(rf.party);
+    out += ",\"hp\":";
+    out += rf.has_party ? "1" : "0";
+    out += ",\"d\":[";
+    for (size_t i = 0; i < rf.domains.size(); ++i) {
+      if (i) out += ",";
+      out += "[\"";
+      append_json_escape(out, rf.domains[i].name);
+      out += "\",";
+      out += rf.domains[i].negative ? "1" : "0";
+      out += "]";
+    }
+    out += "],\"tok\":\"";
+    append_json_escape(out, rf.token);
+    out += "\",\"ok\":0}";
+  }
+  out += "]";
   return out;
 }
 

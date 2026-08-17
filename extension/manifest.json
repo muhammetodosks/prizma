@@ -4,10 +4,22 @@
   "version": "1.0.0",
   "description": "__MSG_extDescription__",
   "default_locale": "tr",
+  "author": "Muhammet Oksuz",
+  "homepage_url": "https://github.com/muhammetodosks/prizma",
+  "developer": {
+    "name": "Muhammet Oksuz",
+    "url": "https://github.com/muhammetodosks/prizma"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "prizma@mami.local",
       "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "120.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
@@ -25,6 +37,7 @@
     "unlimitedStorage",
     "contextMenus",
     "dns",
+    "alarms",
     "<all_urls>"
   ],
   "background": {
@@ -59,7 +72,8 @@
   ],
   "web_accessible_resources": [
     "content/snippets.js",
-    "content/vanguard.js"
+    "content/vanguard.js",
+    "resources/*"
   ],
   "commands": {
     "toggle-prize": {
