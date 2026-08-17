@@ -11,13 +11,14 @@ const PrizmaBG = (() => {
     object: 32,              // T_OBJECT
     media: 64,               // T_MEDIA
     xmlhttprequest: 128,     // T_XHR
-    object_subrequest: 256,  // T_OBJECT_SUBREQ
+    fetch: 256,              // T_FETCH  (B7: önceden eksikti → fetch 4096'ya düşüyordu)
+    object_subrequest: 32,   // T_OBJECT (B7: önceden 256 = T_FETCH yanlış eşleşmesi)
     font: 512,               // T_FONT
     websocket: 1024,         // T_WEBSOCKET
     ping: 2048,              // T_PING
     other: 4096,             // T_OTHER
     csp_report: 4096,
-    beacon: 4096
+    beacon: 2048             // B7: beacon ping tipidir (önceden 4096)
   };
 
   const DEFAULT_SETTINGS = {
@@ -27,7 +28,10 @@ const PrizmaBG = (() => {
     stripCookies3p: false,
     cosmeticEnabled: true,
     vanguardEnabled: true,
-    loggerKeep: 500
+    aggressiveMode: false,
+    loggerKeep: 500,
+    autoUpdateLists: true,
+    updateIntervalHours: 24
   };
 
   const LIST_SOURCES = [
@@ -35,11 +39,12 @@ const PrizmaBG = (() => {
     { id: 'easyprivacy',     name: 'EasyPrivacy',      file: 'lists/easyprivacy.txt',      url: 'https://easylist.to/easylist/easyprivacy.txt',   enabled: true },
     { id: 'ublock-filters',  name: 'uBO filters',      file: 'lists/ublock-filters.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt', enabled: true },
     { id: 'ublock-unbreak',  name: 'uBO unbreak',      file: 'lists/ublock-unbreak.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt', enabled: true },
-    { id: 'adguard-turkish', name: 'Türkçe (AdGuard)', file: 'lists/adguard-turkish.txt',  url: 'https://filters.adtidy.org/extension/ublock/filters/8.txt', enabled: true }
+    { id: 'adguard-turkish', name: 'Türkçe (AdGuard)', file: 'lists/adguard-turkish.txt',  url: 'https://filters.adtidy.org/extension/ublock/filters/13.txt', enabled: true }
   ];
 
   let ready = false;
   let settings = { ...DEFAULT_SETTINGS };
+  let siteRules = {};        // { hostname: 'block'|'allow'|'noop' }
   let stats = {
     since: Date.now(),
     dayDate: new Date().toDateString(),
@@ -52,10 +57,46 @@ const PrizmaBG = (() => {
 
   const cnameCache = new Map();
   const cnameBlocked = new Set();
+  // Çifte kalkan: ağ katmanında (webRequest) engellenen hostlar.
+  // Guard'a `w` alanıyla gömülür → VANGUARD DCP statik HTML / data:URI
+  // yollarından sızan bu hostları DOM seviyesinde de keser.
+  const webBlockedHosts = new Set();
+  const WEB_BLOCKED_MAX = 4000;
 
   // ── Yardımcılar ──────────────────────────────────────────────────────────
   function hostnameOf(url) {
     try { return new URL(url).hostname; } catch (e) { return ''; }
+  }
+
+  // $redirect=RESOURCE kuralı → yerel no-op kaynağa dönüştür.
+  // Listelerdeki isimler uBO/ABP adlandırması kullanır; bilinenler eşlenir,
+  // bilinmeyen isimler noopjs'e düşer (güvenli varsayılan).
+  function redirectResource(rule) {
+    if (!rule) return null;
+    const m = /\$redirect(?:-rule)?=([a-z0-9_.-]+)/i.exec(rule);
+    if (!m) return null;
+    let name = m[1];
+    const ALIASES = {
+      'noopjs': 'noopjs.js',
+      'noop.js': 'noop.js',
+      'noop': 'noopjs.js',
+      'noop.txt': 'noop.txt',
+      'noopjson': 'noopjson',
+      'noop-1s.mp4': 'noop-1s.mp4',
+      '1x1.gif': 'noop.txt',
+      '1x1.png': 'noop.txt',
+      '2x2.png': 'noop.txt',
+      'google-ima.js': 'google-ima.js',
+      'google-ima3.js': 'google-ima.js',
+      'ima3.js': 'google-ima.js',
+      'amazon_apstag.js': 'amazon_apstag.js',
+      'chartbeat.js': 'chartbeat.js',
+      'fingerprint2.js': 'fingerprint2.js',
+      'sensors-analytics.js': 'sensors-analytics.js',
+      'empty.js': 'noopjs.js'
+    };
+    const file = ALIASES[name] || (name.endsWith('.js') ? name : 'noopjs.js');
+    return browser.runtime.getURL('resources/' + file);
   }
   function isThirdParty(url, docUrl) {
     if (!docUrl) return true;
@@ -64,6 +105,62 @@ const PrizmaBG = (() => {
     if (!a || !b) return false;
     if (a === b) return false;
     return !(a.endsWith('.' + b) || b.endsWith('.' + a));
+  }
+
+  // Teknoloji 2: $removeparam / $queryprune — kuraldan parametre spesifikasyonunu
+  // çıkarır. Dönüş: '' (tüm parametreler), param adı, '/regex/' ya da null.
+  function extractRemoveParam(rule) {
+    if (!rule) return null;
+    const m = /\$(?:removeparam|queryprune)(?:=([^,]*))?/i.exec(rule);
+    if (!m) return null;
+    if (m[1] === undefined || m[1] === '') return '';
+    return m[1];
+  }
+
+  // URL'de belirtilen query parametrelerini siler. Değişiklik yoksa null.
+  function cleanUrlParams(url, paramSpec) {
+    try {
+      const u = new URL(url);
+      const keys = Array.from(u.searchParams.keys());
+      if (!keys.length) return null;
+      let changed = false;
+      if (paramSpec === '') {
+        u.search = '';
+        changed = true;
+      } else if (paramSpec.length >= 2 && paramSpec[0] === '/' && paramSpec[paramSpec.length - 1] === '/') {
+        // /regex/ formu — parametre ADI regex ile eşleşir (uBO davranışı)
+        let re;
+        try { re = new RegExp(paramSpec.slice(1, -1), 'i'); } catch (e) { return null; }
+        for (const k of keys) {
+          if (re.test(k)) { u.searchParams.delete(k); changed = true; }
+        }
+      } else {
+        // düz ad; uBO çoklu değeri '|' ile ayırır ($removeparam=a|b)
+        const names = paramSpec.split('|').filter((s) => s !== '');
+        for (const k of keys) {
+          const kl = k.toLowerCase();
+          for (const n of names) {
+            if (kl === n.toLowerCase()) { u.searchParams.delete(k); changed = true; break; }
+          }
+        }
+      }
+      if (!changed) return null;
+      u.search = u.searchParams.toString();
+      return u.toString();
+    } catch (e) { return null; }
+  }
+
+  // Per-site mod: belirli host (ve alt alan adları) için kullanıcı tercihi.
+  function siteModeFor(host) {
+    if (!host || !siteRules) return 'normal';
+    let h = host.toLowerCase();
+    while (h) {
+      if (siteRules[h]) return siteRules[h];
+      const dot = h.indexOf('.');
+      if (dot === -1) break;
+      h = h.slice(dot + 1);
+    }
+    return 'normal';
   }
   async function storageGet(keys) { return browser.storage.local.get(keys); }
   async function storageSet(obj) { await browser.storage.local.set(obj); }
@@ -154,6 +251,11 @@ const PrizmaBG = (() => {
         console.warn('Liste yüklenemedi: ' + src.id, e);
       }
     }
+    // Teknoloji 1 — JS-Native RegExp motoru: C++'ın derleyemediği regex
+    // filtreleri WASM'dan alınır, native RegExp önbelleği senkronize edilir.
+    // Bu çağrı olmadan lookahead regex'leri (uBO listelerindeki çoğu /.../)
+    // hiç değerlendirilmezdi.
+    Prizma.syncRegexes();
   }
 
   // Listeleri canlı kaynaktan güncelle (önbelleği de yenile).
@@ -203,8 +305,29 @@ const PrizmaBG = (() => {
     if (!hostname) return {};
     const docUrl = details.documentUrl || details.initiator || '';
     const docHost = hostnameOf(docUrl);
+    // FASE 4.2: per-site kontrol — ana çerçevenin hostuna göre karar
+    const pageHost = docHost || hostname;
+    const siteMode = siteModeFor(pageHost);
+    if (siteMode === 'noop') return {};
+    if (siteMode === 'allow') return {};  // B9: izin ver — hiçbir şey engelleme
     const thirdParty = isThirdParty(details.url, docUrl);
     const lower = details.url.toLowerCase();
+
+    // Agresif mod: kurala bakmadan tüm üçüncü taraf script/iframe/font/object
+    // isteklerini engelle. Sayfa kırılmasını önlemek için aynı-origin ve
+    // ana belge istekleri (main_frame) dokunulmaz bırakılır.
+    // B9: site modu 'block' (popup "Agresif") per-site agresif engelleme — global
+    // agresifMode açık olmasa bile o sitenin hostu için aynı kurallar uygulanır.
+    const aggressiveActive = settings.aggressiveMode || siteMode === 'block';
+    if (aggressiveActive && thirdParty && siteMode !== 'allow') {
+      const aggressiveTypes = ['script', 'sub_frame', 'font', 'object', 'media'];
+      if (aggressiveTypes.includes(type) && !/^data:/i.test(details.url)) {
+        if (webBlockedHosts.size < WEB_BLOCKED_MAX) webBlockedHosts.add(hostname);
+        bumpBlocked(type);
+        pushLog({ t: Date.now(), type, url: details.url, rule: '(AGGRESSIVE)', action: 'block', host: hostname, doc: docHost, thirdParty });
+        return { cancel: true };
+      }
+    }
 
     if (settings.cnameCloaking && !cnameBlocked.has(hostname)) {
       watchCname(hostname);
@@ -217,6 +340,29 @@ const PrizmaBG = (() => {
 
     const action = Prizma.match(lower, typeBit, hostname, docHost, thirdParty);
     if (action === 1) {
+      const rule = Prizma.lastRule();
+      // Teknoloji 2 — $removeparam / $queryprune: isteği iptal ETMEZ, sadece
+      // query parametrelerini ayıklar (redirectUrl). Temizlenecek parametre
+      // yoksa istek olduğu gibi geçer. (Blok kuralı varsa öncelik hep blokta.)
+      const pruneParam = extractRemoveParam(rule);
+      if (pruneParam !== null) {
+        const cleaned = cleanUrlParams(details.url, pruneParam);
+        if (cleaned && cleaned !== details.url) {
+          bumpBlocked(type);
+          pushLog({ t: Date.now(), type, url: details.url, rule, action: 'prune', host: hostname, doc: docHost, thirdParty, prunedUrl: cleaned });
+          return { redirectUrl: cleaned };
+        }
+        return {};
+      }
+      // $redirect desteği: eşleşen kural bir redirect kaynağı belirtiyorsa,
+      // isteği iptal etmek yerine yerel no-op kaynağa yönlendir (sayfa kırılmaz).
+      const redir = redirectResource(rule);
+      if (redir) {
+        bumpBlocked(type);
+        pushLog({ t: Date.now(), type, url: details.url, rule, action: 'redirect', host: hostname, doc: docHost, thirdParty, resource: redir });
+        return { redirectUrl: redir };
+      }
+      if (webBlockedHosts.size < WEB_BLOCKED_MAX) webBlockedHosts.add(hostname);
       bumpBlocked(type);
       pushLog({ t: Date.now(), type, url: details.url, rule: Prizma.lastRule(), action: 'block', host: hostname, doc: docHost, thirdParty });
       return { cancel: true };
@@ -266,6 +412,19 @@ const PrizmaBG = (() => {
           settings
         };
       }
+      case 'getSiteMode': {
+        const host = String(msg.hostname || '').toLowerCase();
+        return { mode: siteModeFor(host) };
+      }
+      case 'setSiteMode': {
+        const host = String(msg.hostname || '').toLowerCase();
+        const mode = String(msg.mode || 'normal');
+        if (!host || !['normal', 'block', 'allow', 'noop'].includes(mode)) return { ok: false };
+        if (mode === 'normal') delete siteRules[host];
+        else siteRules[host] = mode;
+        await storageSet({ siteRules });
+        return { ok: true, mode };
+      }
       case 'togglePause': {
         settings.paused = !settings.paused;
         persistSettings();
@@ -293,14 +452,28 @@ const PrizmaBG = (() => {
       case 'getCosmetic': {
         if (!settings.cosmeticEnabled) return { json: null };
         const host = msg.hostname || '';
+        // B9: 'noop' (izin ver) ve 'block' (agresif) — her ikisinde de cosmetic
+        // filtreler uygulanmaz; 'block' zaten ağ katmanında her şeyi kesiyor.
+        const mode = siteModeFor(host);
+        if (mode === 'noop' || mode === 'block') return { json: null };
         // üst düzey host için generic + specific; alt çerçeveler de aynı hostu kullanır
         return { json: Prizma.cosmetic(host) };
       }
       case 'getGuard': {
         // VANGUARD DCP — guard indeksi (wasm export). İsteğe bağlı tutulur;
         // load_list sonrası aynıdır, her çağrıda yeniden serialize edilir.
+        // Çifte kalkan: ağ katmanında engellenen hostlar `w` olarak eklenir,
+        // böylece DCP statik HTML yollarından sızan hostları da keser.
         if (!settings.vanguardEnabled) return { json: null };
-        return { json: Prizma.guardExport() };
+        let json = Prizma.guardExport();
+        if (webBlockedHosts.size > 0) {
+          try {
+            const g = JSON.parse(json);
+            g.w = Array.from(webBlockedHosts).map((h) => [h, 0xFFFFFFFF]);
+            json = JSON.stringify(g);
+          } catch (e) { /* guard değiştirilemezse olduğu gibi geç */ }
+        }
+        return { json };
       }
       case 'vanguardStats': {
         const blocked = Math.max(0, Math.min(10000, msg.blocked | 0));
@@ -349,9 +522,10 @@ const PrizmaBG = (() => {
   }
 
   async function init() {
-    const got = await storageGet(['settings', 'stats', 'customFilters']);
+    const got = await storageGet(['settings', 'stats', 'customFilters', 'siteRules']);
     settings = { ...DEFAULT_SETTINGS, ...(got.settings || {}) };
     stats = { ...stats, ...(got.stats || {}) };
+    siteRules = got.siteRules || {};
     if (!got.stats) persistStats();
 
     await Prizma.init();
@@ -374,6 +548,27 @@ const PrizmaBG = (() => {
         settings.paused = !settings.paused;
         persistSettings();
       }
+    });
+
+    // FASE 4.1: otomatik liste güncelleme alarmı (varsayılan 24 saatte bir)
+    const updateAlarm = 'prizma-list-update';
+    const setupUpdateAlarm = () => {
+      try {
+        browser.alarms.clear(updateAlarm);
+        if (settings.autoUpdateLists && settings.updateIntervalHours > 0) {
+          browser.alarms.create(updateAlarm, {
+            delayInMinutes: settings.updateIntervalHours * 60,
+            periodInMinutes: settings.updateIntervalHours * 60
+          });
+        }
+      } catch (e) {}
+    };
+    setupUpdateAlarm();
+    browser.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name !== updateAlarm) return;
+      updateListsRemote()
+        .then((updated) => reloadEngine())
+        .catch(() => {});
     });
 
     ready = true;

@@ -17,6 +17,9 @@ if [ ! -s "$ROOT/lists/easylist.txt" ]; then
 fi
 mkdir -p "$ROOT/extension/lists"
 cp -rn "$ROOT"/lists/*.txt "$ROOT/extension/lists/" 2>/dev/null | true
+# pakete DAİMA güncel listeler girsin (cp -n eski kopyayı korurdu → paketlenen
+# Türkçe liste bayat kalıyor, sozcu/hurriyet kuralları kayboluyordu)
+cp -f "$ROOT"/lists/*.txt "$ROOT/extension/lists/"
 cd "$ROOT/extension"
 zip -qr "$XPI" . -x "*.DS_Store"
 echo "XPI: $XPI ($(du -h "$XPI" | cut -f1))"

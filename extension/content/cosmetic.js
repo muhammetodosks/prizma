@@ -33,14 +33,179 @@
         }
       }
     }
-    if (entry.procedural && entry.procedural.length) {
-      for (const s of entry.procedural) {
-        if (/[:\(\)\[\]"=']/.test(s)) {
-          parts.push(s + '{display:none !important}');
-        }
-      }
-    }
     return parts.join('\n');
+  }
+
+  // ── Prosedürel operatör çözümleyici (uBO :has-text/:upward/:xpath vb.) ───
+  // Tarayıcı bu pseudo'ları CSS olarak tanımaz; bu yüzden JS ile çözülür.
+  // entry.procedural = [{ sel, op }] — sel seçicinin prosedürel kısmını içerir.
+  function hideProcedural(entry) {
+    if (!entry.procedural || !entry.procedural.length) return;
+    for (const p of entry.procedural) {
+      try { hideProceduralOp(p); } catch (e) {}
+    }
+  }
+
+  function parseOp(sel, op) {
+    // op örn: has-text, upward, xpath, matches-attr, matches-property, not, has
+    const re = new RegExp('^' + op + '\\((.*)\\)$');
+    const m = sel.match(re);
+    return m ? m[1] : '';
+  }
+
+  function hideProceduralOp(p) {
+    const sel = p.sel || '';
+    const op = p.op || '';
+    if (!sel || !op) return;
+    const arg = parseOp(sel, op);
+    switch (op) {
+      case 'has-text': {
+        const text = unquote(arg).toLowerCase();
+        if (!text) return;
+        const run = () => {
+          const nodes = document.querySelectorAll(sel.slice(0, sel.lastIndexOf(':')) || 'body *');
+          for (const el of nodes) {
+            if (el.childElementCount === 0 && (el.textContent || '').toLowerCase().indexOf(text) !== -1) {
+              el.style.setProperty('display', 'none', 'important');
+            }
+          }
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'upward': {
+        const n = parseInt(unquote(arg), 10);
+        if (!Number.isFinite(n) || n < 1) return;
+        const baseSel = sel.slice(0, sel.lastIndexOf(':'));
+        const run = () => {
+          const nodes = document.querySelectorAll(baseSel || 'body *');
+          for (const el of nodes) {
+            let up = el;
+            for (let i = 0; i < n && up; i++) up = up.parentElement;
+            if (up && up !== document.documentElement && up !== document.body) {
+              up.style.setProperty('display', 'none', 'important');
+            }
+          }
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'matches-attr': {
+        // arg: "^attr=\"değer\"" veya "attr*=değer" biçiminde
+        const m = arg.match(/^\^?([a-zA-Z_-]+)(=|\*=|\^=|\$=|\|=)"?([^"]*)"?$/);
+        if (!m) return;
+        const [, attr, comp, val] = m;
+        const run = () => {
+          const baseSel = sel.slice(0, sel.lastIndexOf(':'));
+          const nodes = document.querySelectorAll(baseSel || 'body *');
+          for (const el of nodes) {
+            const av = el.getAttribute(attr);
+            if (av == null) continue;
+            let hit = false;
+            if (comp === '=') hit = av === val;
+            else if (comp === '*=') hit = av.indexOf(val) !== -1;
+            else if (comp === '^=') hit = av.startsWith(val);
+            else if (comp === '$=') hit = av.endsWith(val);
+            else if (comp === '|=') hit = av === val || av.startsWith(val + '-');
+            if (hit) el.style.setProperty('display', 'none', 'important');
+          }
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'matches-property': {
+        const m = arg.match(/^([a-zA-Z0-9_.]+)([=<>])(.*)$/);
+        if (!m) return;
+        const [, prop, comp, val] = m;
+        const run = () => {
+          const baseSel = sel.slice(0, sel.lastIndexOf(':'));
+          const nodes = document.querySelectorAll(baseSel || 'body *');
+          for (const el of nodes) {
+            let v;
+            try {
+              v = prop.split('.').reduce((o, k) => (o == null ? undefined : o[k]), el);
+            } catch (e) { v = undefined; }
+            let hit = false;
+            if (comp === '=') hit = String(v) === String(val);
+            else if (comp === '>') hit = parseFloat(v) > parseFloat(val);
+            else if (comp === '<') hit = parseFloat(v) < parseFloat(val);
+            if (hit) el.style.setProperty('display', 'none', 'important');
+          }
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'min-text-length': {
+        const n = parseInt(unquote(arg), 10);
+        if (!Number.isFinite(n) || n < 1) return;
+        const baseSel = sel.slice(0, sel.lastIndexOf(':'));
+        const run = () => {
+          const nodes = document.querySelectorAll(baseSel || 'body *');
+          for (const el of nodes) {
+            if ((el.textContent || '').length >= n) {
+              el.style.setProperty('display', 'none', 'important');
+            }
+          }
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'xpath': {
+        let expr = unquote(arg);
+        if (!expr) return;
+        const run = () => {
+          try {
+            const res = document.evaluate(expr, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for (let i = 0; i < res.snapshotLength; i++) {
+              const el = res.snapshotItem(i);
+              if (el && el.style) el.style.setProperty('display', 'none', 'important');
+            }
+          } catch (e) {}
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      case 'has': case 'not': {
+        // :has(seçici) / :not(seçici) — tarayıcı yerel destekliyorsa CSS yeterli,
+        // değilse querySelectorAll desteklediği kadarıyla uygula.
+        const run = () => {
+          try {
+            const nodes = document.querySelectorAll(sel);
+            for (const el of nodes) el.style.setProperty('display', 'none', 'important');
+          } catch (e) {}
+        };
+        run();
+        observeMutations(run);
+        break;
+      }
+      default:
+        // bilinmeyen op — CSS'e olduğu gibi bırak (uyumsuz pseudo sessizce atlanır)
+        try {
+          const nodes = document.querySelectorAll(sel);
+          for (const el of nodes) el.style.setProperty('display', 'none', 'important');
+        } catch (e) {}
+    }
+  }
+
+  function unquote(s) {
+    const t = String(s).trim();
+    if (t.length >= 2 && (t[0] === '\'' || t[0] === '"') && t[t.length - 1] === t[0]) {
+      return t.slice(1, -1);
+    }
+    return t;
+  }
+
+  function observeMutations(fn) {
+    try {
+      const mo = new MutationObserver(() => queueMicrotask(fn));
+      mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    } catch (e) {}
   }
 
   function applyRemove(entry) {
@@ -79,6 +244,7 @@
     const css = buildCSS(data);
     if (css) injectCSS(css);
     applyRemove(data);
+    hideProcedural(data);
     injectScriptlets(data);
   }
 
@@ -86,21 +252,49 @@
   let watcher = null;
   function startWatcher() {
     if (watcher || !data) return;
-    watcher = setInterval(() => {
+    const applyRemoveDebounced = () => {
       if (data.remove && data.remove.length) applyRemove(data);
-    }, 5000);
+    };
+    // MutationObserver anlık; döngü koruması için microtask'te çalıştır
+    const mo = new MutationObserver((mutations) => {
+      if (!data || !data.remove || !data.remove.length) return;
+      queueMicrotask(applyRemoveDebounced);
+    });
+    try {
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+    watcher = mo;
   }
 
-  // ── Veri çekme ────────────────────────────────────────────────────────────
-  browser.runtime.sendMessage({ type: 'getCosmetic', hostname: HOSTNAME })
-    .then((res) => {
-      if (res && res.json) {
-        try { data = JSON.parse(res.json); } catch (e) { data = null; }
-      }
-      apply();
-      startWatcher();
-    })
-    .catch(() => {});
+  // ── Veri çekme (retry döngüsü) ────────────────────────────────────────────
+  // Background init asenkron olduğu için (WASM + liste yükleme) document_start'ta
+  // gönderilen ilk mesaj "no receiver" alabilir. Retry ile yeniden denenir.
+  // COSMETIC_MAX_RETRY: toplam deneme sayısı; 300ms + deneme*200ms artan gecikme.
+  const COSMETIC_MAX_RETRY = 30;
+  function fetchCosmetic(attempt) {
+    browser.runtime.sendMessage({ type: 'getCosmetic', hostname: HOSTNAME })
+      .then((res) => {
+        if (res && res.json) {
+          try { data = JSON.parse(res.json); } catch (e) { data = null; }
+        } else if (res && res.ok) {
+          try { data = JSON.parse(res.json || 'null'); } catch (e) { data = null; }
+        }
+        if (!data) {
+          if (attempt < COSMETIC_MAX_RETRY) {
+            setTimeout(() => fetchCosmetic(attempt + 1), 300 + attempt * 200);
+          }
+          return;
+        }
+        apply();
+        startWatcher();
+      })
+      .catch(() => {
+        if (attempt < COSMETIC_MAX_RETRY) {
+          setTimeout(() => fetchCosmetic(attempt + 1), 300 + attempt * 200);
+        }
+      });
+  }
+  fetchCosmetic(0);
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(apply, 0);

@@ -335,6 +335,141 @@ void test_guard() {
   CHECK(exp.find("\"tracker.net\"") != std::string::npos);
 }
 
+void test_new_features() {
+  // ── Teknoloji 2: $removeparam / $queryprune ───────────────────────────────
+  ParseResult r = parse_line("||example.com^$removeparam=utm_source", 500);
+  CHECK_EQ(r.nets.size(), 1u);
+  CHECK(r.nets[0].has_remove_param);
+  CHECK_EQ(r.nets[0].remove_param, "utm_source");
+
+  r = parse_line("||example.com^$queryprune=utm_medium", 501);
+  CHECK_EQ(r.nets.size(), 1u);
+  CHECK(r.nets[0].has_remove_param);
+  CHECK_EQ(r.nets[0].remove_param, "utm_medium");
+
+  r = parse_line("*$removeparam", 502);
+  CHECK_EQ(r.nets.size(), 1u);
+  CHECK(r.nets[0].has_remove_param);
+  CHECK(r.nets[0].remove_param.empty());  // boş = tüm parametreler
+
+  // removeparam kuralı ağ engelleme kararı vermez; action=1 olsa da engine
+  // kuralı prune olarak raporlar. Engelleme yokken istek geçer.
+  {
+    Engine e = make_engine("*$removeparam=utm_source\n");
+    Engine::MatchResult m = e.match("https://example.com/?a=1&utm_source=x", T_DOCUMENT,
+                                    "example.com", "example.com", false);
+    CHECK_EQ(m.action, 1);
+    CHECK(m.rule_raw.find("removeparam") != std::string::npos);
+  }
+  // gerçek blok varsa blok kazanır
+  {
+    Engine e = make_engine("||ads.net^\n||ads.net^$removeparam=utm_source\n");
+    Engine::MatchResult m = e.match("https://ads.net/x", T_IMAGE,
+                                    "ads.net", "foo.com", true);
+    CHECK_EQ(m.action, 1);
+    CHECK(m.rule_raw.find("ads.net^") != std::string::npos);
+    CHECK(m.rule_raw.find("removeparam") == std::string::npos);
+  }
+  // guard: removeparam kuralları DCP tablosuna GİRMEMELİ (engelleme değil)
+  {
+    Engine e = make_engine("||prune-only.net^$removeparam=utm_source\n");
+    const Guard& g = e.guard();
+    CHECK_EQ(g.check_host("prune-only.net", G_ANY), -1);
+  }
+
+  // ── B4: #@#...:style( → C_STYLE exception ─────────────────────────────────
+  r = parse_line("example.com#@#.banner:style(display: none !important)", 503);
+  CHECK_EQ(r.cos.size(), 1u);
+  CHECK(r.cos[0].is_exception);
+  CHECK_EQ(r.cos[0].kind, C_STYLE);
+
+  // style exception, aynı selector'ın style kuralını iptal etmeli
+  {
+    Engine e = make_engine(
+        "example.com##.banner:style(display: block !important)\n"
+        "example.com#@#.banner:style(display: block !important)\n");
+    std::string j = e.cosmetic_json("example.com");
+    CHECK(j.find(".banner") == std::string::npos);  // iptal edildi
+  }
+
+  // ── B6: anchor_end + sonda '^' — separator ya da URL sonu ─────────────────
+  {
+    Engine e = make_engine("||example.com/ads^|\n");
+    // URL sonu (^ = URL sonu)
+    CHECK_EQ(match(e, "https://example.com/ads", T_IMAGE, "example.com", "foo.com"), 1);
+    // separator sonu (^ = '/')
+    CHECK_EQ(match(e, "https://example.com/ads/", T_IMAGE, "example.com", "foo.com"), 1);
+    // eşleşmeyen
+    CHECK_EQ(match(e, "https://example.com/ads-extra", T_IMAGE, "example.com", "foo.com"), -1);
+    CHECK_EQ(match(e, "https://example.com/ad", T_IMAGE, "example.com", "foo.com"), -1);
+  }
+  // B6 hostname-anchorsız path (pattern.cpp anchor_end dalı)
+  {
+    Engine e = make_engine("example.com/ads^|\n");
+    CHECK_EQ(match(e, "https://example.com/ads", T_IMAGE, "example.com", "foo.com"), 1);
+    CHECK_EQ(match(e, "https://example.com/ads/", T_IMAGE, "example.com", "foo.com"), 1);
+    CHECK_EQ(match(e, "https://example.com/ads-x", T_IMAGE, "example.com", "foo.com"), -1);
+    CHECK_EQ(match(e, "https://evil.org/x", T_IMAGE, "evil.org", "foo.com"), -1);
+  }
+
+  // ── Teknoloji 1: regex dışa aktarımı (JS-Native RegExp köprüsü) ───────────
+  {
+    // lookbehind/named-group içeren regex C++'ta derlenemez → re_ok=0 → export'a
+    // girer (JS-Native RegExp motoru devralır). uBO listelerindeki bu
+    // yapılar önceden her istekte derleme hatası verip SESSİZCE atlanıyordu.
+    Engine e = make_engine("/ads/(?<!foo)[a-z]+/$");
+    std::string j = e.regex_export_json();
+    // regex_src'de çıplak kaynak var ('/ads/.../' öneki sıyrılmış)
+    CHECK(j.find("(?<!foo)") != std::string::npos);
+    CHECK(j.find("\"ok\":0") != std::string::npos);
+    CHECK(j.find("\"e\":0") != std::string::npos);
+    CHECK(j.find("\"t\":0") != std::string::npos);
+    // C++'ta derlenen normal regex export'a girmez (çifte değerlendirme yok)
+    Engine e2 = make_engine("/banner[0-9]+\\.gif/\n");
+    CHECK_EQ(e2.regex_export_json(), "[]");
+
+    // C++ tarafında eşleşme hâlâ çalışır (derlenebilen regex)
+    CHECK_EQ(match(e2, "http://x.com/banner99.gif", T_IMAGE, "x.com", "foo.com"), 1);
+    CHECK_EQ(match(e2, "http://x.com/nope.gif", T_IMAGE, "x.com", "foo.com"), -1);
+  }
+
+  // ── B2: regex token küçük harf + icase varsayılan ─────────────────────────
+  {
+    // Büyük harfli regex kaynağı: token ön-filtresi küçük harfli URL ile
+    // eşleşebilmeli (token lowercase fix); varsayılan icase regex eşleşmesi.
+    Engine e = make_engine("/AdSense/[a-z]+/\n");
+    CHECK_EQ(match(e, "http://x.com/adsense/abc", T_SCRIPT, "x.com", "foo.com"), 1);
+    CHECK_EQ(match(e, "http://x.com/adsense/xyz", T_SCRIPT, "x.com", "foo.com"), 1);
+    CHECK_EQ(match(e, "http://x.com/no-math", T_SCRIPT, "x.com", "foo.com"), -1);
+  }
+
+  // ── B1: 128+ fusable selector → tek dev :is() DEĞİL, parçalı gruplar ──────
+  {
+    Engine e;
+    std::string lists;
+    for (int i = 0; i < 300; ++i) {
+      lists += "##.fuse-" + std::to_string(i) + "\n";
+    }
+    e.load_list(lists);
+    std::string j = e.cosmetic_json("example.com");
+    // en az iki :is( grubu olmalı (300 selector 128'lik dilimlerde → en az 3)
+    size_t groups = 0, pos = 0;
+    while ((pos = j.find(":is(", pos)) != std::string::npos) {
+      ++groups;
+      pos += 4;
+    }
+    CHECK(groups >= 3);
+    // toplam selector sayısı korunmalı (hiçbiri kaybolmamalı)
+    size_t sel_count = 0;
+    pos = 0;
+    while ((pos = j.find(".fuse-", pos)) != std::string::npos) {
+      ++sel_count;
+      pos += 6;
+    }
+    CHECK_EQ(sel_count, 300u);
+  }
+}
+
 void test_stats() {
   Engine e = make_engine("||example.com^\n##.ad\n");
   CHECK_EQ(e.net_filter_count(), 1u);
@@ -396,6 +531,7 @@ int main() {
   test_types();
   test_cosmetic();
   test_guard();
+  test_new_features();
   test_stats();
   test_perf();
   std::printf("\n%s: %d geçti, %d başarısız\n",

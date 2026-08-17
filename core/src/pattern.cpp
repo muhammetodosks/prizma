@@ -137,6 +137,26 @@ PatternMatchResult match_network_pattern(const std::string& url,
     return r;
   }
   if (anchor_end) {
+    // B6: sonda '^' + | (ör. 'example.com/ads^|') — '^' literal sonek
+    // DEĞİLDİR; ya URL sonu ya da bir ayırıcı karakter (separator) ister.
+    // Önceki kod soneki birebir karşılaştırıyordu → '^' hiçbir URL'de
+    // bulunamadığından kural asla eşleşmiyordu (sessiz false-negative).
+    if (!pattern.empty() && pattern.back() == '^') {
+      const std::string core = pattern.substr(0, pattern.size() - 1);
+      // durum A: '^' = URL sonu
+      if (url.size() >= core.size() &&
+          url.compare(url.size() - core.size(), core.size(), core) == 0) {
+        r.matched = true;
+        return r;
+      }
+      // durum B: '^' = ayırıcı → url 'core <separator>' ile biter
+      if (url.size() > core.size() && is_separator(url.back()) &&
+          url.compare(url.size() - core.size() - 1, core.size(), core) == 0) {
+        r.matched = true;
+        return r;
+      }
+      return r;
+    }
     if (url.size() < pattern.size()) return r;
     r.matched = url.compare(url.size() - pattern.size(), pattern.size(), pattern) == 0;
     return r;

@@ -66,12 +66,14 @@ struct NetworkFilter {
   bool is_important = false;
   bool is_badfilter = false;
   bool match_case = false;         // match-case seçeneği
+  bool has_remove_param = false;   // $removeparam / $queryprune seçeneği
   bool has_party = false;
   uint32_t type_bits = 0;          // 0 = tüm tipler
   uint8_t party = P_ANY;           // P_THIRD / P_FIRST
   std::vector<DomainRule> domains; // doku domain kısıtları (boş = yok)
   std::string regex_src;           // regex kaynağı (derleme JS tarafında değil, C++ tarafında)
   std::string token;               // index token'ı (boş = brute force)
+  std::string remove_param;        // $removeparam değeri; boş = tüm parametreler (ad ya da /regex/)
 };
 
 // ─── Cosmetic filtre ─────────────────────────────────────────────────────────

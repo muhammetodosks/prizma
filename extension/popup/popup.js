@@ -22,6 +22,12 @@ async function refresh() {
 
   const toggle = $('pauseToggle');
   toggle.checked = !state.paused;
+  const agg = $('aggressiveToggle');
+  if (agg) {
+    agg.checked = !!(state.settings && state.settings.aggressiveMode);
+    const warn = $('aggressiveWarn');
+    if (warn) warn.style.display = agg.checked ? 'block' : 'none';
+  }
   const el = $('state');
   el.textContent = state.paused ? 'Prizma duraklatıldı' : 'Prizma etkin';
   el.className = 'state ' + (state.paused ? 'paused' : 'active');
@@ -30,11 +36,52 @@ async function refresh() {
   const guard = state.guard || {};
   $('guardHosts').textContent = fmtCount((guard.host || 0));
   $('vanguardBlocked').textContent = fmtCount(state.stats.vanguard || 0);
+
+  await refreshSite();
 }
+
+async function refreshSite() {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url || !/^https?:/i.test(tab.url)) {
+      $('siteName').textContent = 'Bu site (yerel sayfa)';
+      return;
+    }
+    let host = 'Bilinmeyen';
+    try { host = new URL(tab.url).hostname; } catch (e) {}
+    $('siteName').textContent = host;
+    const r = await browser.runtime.sendMessage({ type: 'getSiteMode', hostname: host });
+    const mode = (r && r.mode) || 'normal';
+    const btns = document.querySelectorAll('#siteBtns .site-btn');
+    for (const b of btns) {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    }
+  } catch (e) {}
+}
+
+document.querySelectorAll('#siteBtns .site-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    try {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url) return;
+      const host = new URL(tab.url).hostname;
+      const mode = btn.dataset.mode;
+      await browser.runtime.sendMessage({ type: 'setSiteMode', hostname: host, mode });
+      refreshSite();
+    } catch (e) {}
+  });
+});
 
 $('pauseToggle').addEventListener('change', async (ev) => {
   const r = await browser.runtime.sendMessage({ type: 'togglePause' });
   if (r && r.paused !== undefined) refresh();
+});
+
+$('aggressiveToggle').addEventListener('change', async (ev) => {
+  await browser.runtime.sendMessage({ type: 'setSetting', key: 'aggressiveMode', value: ev.target.checked });
+  const warn = $('aggressiveWarn');
+  if (warn) warn.style.display = ev.target.checked ? 'block' : 'none';
+  refresh();
 });
 
 $('btnLogger').addEventListener('click', (ev) => {

@@ -72,6 +72,26 @@ int prizma_match(const char* url, int type_bit, const char* hostname,
 
 const char* prizma_last_rule() { return g_out; }
 
+// Son eşleşmenin önceliği: 3=allow_imp, 2=block_imp, 1=allow, 0=block, -1=yok.
+// JS-Native RegExp motoru WASM sonucuyla aynı anda kendi regex eşleşmelerini
+// değerlendirirken öncelikleri karşılaştırmak için kullanılır (senkron çağrı
+// zincirinde güvenlidir — match() ile arada await yoktur).
+int prizma_match_priority() {
+  return g_engine ? g_engine->last_priority() : -1;
+}
+
+// JS-Native RegExp motoruna devredilen (C++'ın derleyemediği, lookahead vb.)
+// regex filtrelerini JSON array olarak dışa aktarır. Çağıran taraf `out`
+// tamponunu verir; sığmazsa -1. (Büyük listeler için cap esaslı güvenli taşıma.)
+int prizma_regex_export(char* out, int cap) {
+  if (!g_engine || !out || cap <= 0) return -1;
+  std::string j = g_engine->regex_export_json();
+  if (j.size() + 1 > static_cast<size_t>(cap)) return -1;
+  std::memcpy(out, j.data(), j.size());
+  out[j.size()] = '\0';
+  return static_cast<int>(j.size());
+}
+
 // Cosmetic filtre JSON'u (hostname için).
 // Cosmetic filtre JSON'u (hostname için).
 // Çağıran taraf `out` tamponunu ve kapasitesini verir; dönüş JSON uzunluğudur

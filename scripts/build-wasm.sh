@@ -30,8 +30,9 @@ em++ -O2 -std=c++17 \
   -s ENVIRONMENT=web \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s NO_EXIT_RUNTIME=1 \
+  -s DISABLE_EXCEPTION_CATCHING=0 \
   -s EXPORTED_RUNTIME_METHODS="["HEAPU8","HEAP8"]" \
-  -s EXPORTED_FUNCTIONS='["_prizma_new","_prizma_free","_prizma_load_list","_prizma_clear","_prizma_match","_prizma_last_rule","_prizma_cosmetic","_prizma_stats","_prizma_net_filter_count","_prizma_regex_filter_count","_prizma_cosmetic_filter_count","_prizma_guard_check_host","_prizma_guard_check_url","_prizma_guard_export","_prizma_guard_host_count","_prizma_guard_allow_count","_malloc","_free"]' \
+  -s EXPORTED_FUNCTIONS='["_prizma_new","_prizma_free","_prizma_load_list","_prizma_clear","_prizma_match","_prizma_match_priority","_prizma_last_rule","_prizma_regex_export","_prizma_cosmetic","_prizma_stats","_prizma_net_filter_count","_prizma_regex_filter_count","_prizma_cosmetic_filter_count","_prizma_guard_check_host","_prizma_guard_check_url","_prizma_guard_export","_prizma_guard_host_count","_prizma_guard_allow_count","_malloc","_free"]' \
   -o "$OUT/prizma.js" \
   "$CORE/filter.cpp" "$CORE/pattern.cpp" "$CORE/index.cpp" "$CORE/engine.cpp" "$CORE/guard.cpp" "$CORE/wasm_bindings.cpp"
 

@@ -86,6 +86,9 @@ void Guard::build(const std::vector<NetworkFilter>& nets,
   clear();
   for (const auto& f : nets) {
     if (f.is_regex || f.is_badfilter) continue;
+    // $removeparam kuralları isteği ENGELLEMEZ (parametre ayıklar);
+    // DCP block/allow tablosuna girmemeli, aksi halde istek iptal edilir.
+    if (f.has_remove_param) continue;
     if (!f.hostname_anchor) continue;  // sadece ||host şekli DCP için güvenilir
     // domain= kısıtı olan kurallar bağlama özeldir; DCP global tabloyu
     // kirletmesin (tam motor zaten domain'e göre karar verir).
@@ -104,6 +107,7 @@ void Guard::build(const std::vector<NetworkFilter>& nets,
   }
   for (const auto& f : brute) {
     if (f.is_regex || f.is_badfilter) continue;
+    if (f.has_remove_param) continue;
     if (!f.hostname_anchor) continue;
     if (!f.domains.empty()) continue;
     std::string path;

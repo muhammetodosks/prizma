@@ -2,6 +2,7 @@
 // Prizma Engelleme Motoru — C++/WASM çekirdeği
 
 #include <cstdint>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ class Engine {
     int action = -1;
     std::string rule_raw;   // eşleşen kural metni (logger için)
     bool from_regex = false;
+    int priority = -1;      // 3=allow_imp, 2=block_imp, 1=allow, 0=block, -1=yok
   };
   MatchResult match(const std::string& url, uint32_t type_bit,
                     const std::string& hostname,
@@ -44,6 +46,17 @@ class Engine {
   // ── Cosmetic ──────────────────────────────────────────────────────────────
   // hostname için uygulanacak cosmetic filtreleri JSON olarak döndürür.
   std::string cosmetic_json(const std::string& hostname) const;
+
+  // ── Regex dışa aktarımı (JS-Native RegExp motoru) ─────────────────────────
+  // C++ std::regex'in desteklemediği (lookahead/lookbehind/named-group vb.)
+  // regex filtrelerini JS'e devretmek için JSON array döndürür.
+  // Her eleman: {s:src, raw, e:exception, i:important, m:match_case,
+  //              t:type_bits, p:party, hp:has_party, d:[[name,neg]...],
+  //              ok:re_ok, tok:token}
+  std::string regex_export_json() const;
+
+  // Son eşleşmenin önceliği (3=allow_imp, 2=block_imp, 1=allow, 0=block, -1=yok)
+  int last_priority() const { return last_priority_; }
 
   // ── Vanguard Guard (DCP) ──────────────────────────────────────────────────
   // hostname/path/yol öneki tablosu (prototip-seviyesi DOM kesintisi için).
@@ -60,11 +73,14 @@ class Engine {
     std::string src;
     bool is_exception;
     bool is_important;
+    bool match_case;
     uint32_t type_bits;
     uint8_t party;
     bool has_party;
     std::vector<DomainRule> domains;
     std::string token;
+    std::regex re;      // load_list'te bir kez derlenir (performans)
+    bool re_ok = false; // derleme başarılı mı? (false → JS tarafına devreder)
   };
 
 
@@ -77,6 +93,7 @@ class Engine {
   Guard guard_;
   mutable uint64_t matches_ = 0;
   mutable uint64_t blocked_ = 0;
+  mutable int last_priority_ = -1;
 
   bool check_options(const NetworkFilter& f, uint32_t type_bit,
                      const std::string& doc_hostname, bool third_party) const;

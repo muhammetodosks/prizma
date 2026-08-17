@@ -24,6 +24,7 @@
   // ── Durum ──────────────────────────────────────────────────────────────────
   let blockTbl = new Map();   // hostname → mask
   let allowTbl = new Map();   // hostname → mask
+  let webBlockTbl = new Map(); // ağ katmanında engellenen hostlar (çifte kalkan)
   let urlRules = [];          // [host, path, mask]
   let ready = false;
   let blockedCount = 0;
@@ -33,8 +34,8 @@
     const m = new Map();
     for (const [h, mask] of entries) {
       const k = h.toLowerCase();
-      if (!m.has(k)) m.set(k, m.get(k) | mask);
-      else m.set(k, m.get(k) | mask);
+      // B8: iki dal da `m.get(k) | mask` idi (same-OR) — tek satırda birleştir.
+      m.set(k, (m.get(k) || 0) | mask);
     }
     return m;
   }
@@ -44,6 +45,7 @@
       const g = JSON.parse(json);
       blockTbl = hostToMap(g.h || []);
       allowTbl = hostToMap(g.a || []);
+      webBlockTbl = hostToMap(g.w || []);
       urlRules = (g.u || []).map((u) => ({
         host: u[0], path: u[1], mask: u[2], allow: u[3] === 1
       }));
@@ -79,6 +81,9 @@
     if (!h) return -1;
     if (checkHostTbl(allowTbl, h, mask)) return 0;   // exception → izin
     if (checkHostTbl(blockTbl, h, mask)) return 1;   // engel
+    // Çifte kalkan: ağ katmanında (webRequest) zaten engellenen hostlar,
+    // DCP tarafında da kesilir — statik HTML / data:URI yollarından sızmasın.
+    if (checkHostTbl(webBlockTbl, h, mask)) return 1;
     return -1;
   }
 
@@ -137,13 +142,33 @@
 
   function markBlocked(el, url, mask) {
     blockedCount++;
+    timingCount++;
     try {
       el.__prizmaBlocked = url;
       el.setAttribute('data-prizma-blocked', String(mask || G_ANY));
     } catch (e) {}
     if (reportTimer) clearTimeout(reportTimer);
     reportTimer = setTimeout(reportStats, 800);
+    bumpTimingCleanup();
     return true;
+  }
+
+  // ── HTML filtering (uBO HTML filtering eşdeğeri) ───────────────────────────
+  // Bloklanan script/iframe öğesi DOM'dan TAMAMEN kaldırılır (uBO'nun yaptığı);
+  // medya (img/video/audio) gizlenir (layout kaymasını önler, istek gitmez).
+  const REMOVE_TAGS = new Set(['script', 'iframe', 'embed', 'object', 'frame']);
+  const HIDE_TAGS = new Set(['img', 'video', 'audio', 'source']);
+
+  function purgeBlocked(el) {
+    if (!el || el.nodeType !== 1) return;
+    const tag = (el.tagName || '').toLowerCase();
+    if (REMOVE_TAGS.has(tag)) {
+      try { el.remove(); } catch (e) {}
+    } else if (HIDE_TAGS.has(tag)) {
+      try {
+        el.style.setProperty('display', 'none', 'important');
+      } catch (e) {}
+    }
   }
 
   function reportStats() {
@@ -154,6 +179,27 @@
     try {
       window.postMessage({ prizmaVanguard: true, type: 'stats', blocked: c }, '*');
     } catch (e) {}
+  }
+
+  // ── Resource Timing temizleyici (tam görünmezlik) ────────────────────────
+  // Bloklanan istekler performance.getEntriesByType('resource') listesinden
+  // silinir; anti-adblock script "bu kaynak hiç yüklenmedi" görür ve Prizma'yı
+  // tespit edemez. uBO bunu yapamaz (öğeyi gizler, istek listesinde kalır).
+  // performance.clearResourceTimings() tümü siler; ayrım yapılamaz, bu yüzden
+  // sadece bloklanmış istek sayısı arttığında temizleriz (nadir yazma).
+  let timingTimer = null;
+  let timingCount = 0;
+  function bumpTimingCleanup() {
+    timingCount++;
+    if (timingTimer) return;
+    timingTimer = setTimeout(() => {
+      timingTimer = null;
+      try { performance.clearResourceTimings(); } catch (e) {}
+    }, 400);
+  }
+  function maybeCleanTimings() {
+    // bir blok olduğunda kayıtları temizle (statik HTML + ağ için)
+    if (timingCount > 0) bumpTimingCleanup();
   }
 
   // ── Prototip yamaları ──────────────────────────────────────────────────────
@@ -175,6 +221,7 @@
         set(v) {
           if (typeof v === 'string' && v && checkUrl(v, mask) === 1) {
             markBlocked(this, v, mask);
+            try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
             return; // src HİÇ yazılmaz → öğe yüklenmez
           }
           if (this.__prizmaBlocked) {
@@ -201,6 +248,7 @@
         if ((n === 'src' || n === 'data' || n === 'data-src' || n === 'href') &&
             typeof value === 'string' && value && checkUrl(value, mask) === 1) {
           markBlocked(this, value, mask);
+          try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
           return;
         }
         if (n === 'src' && this.__prizmaBlocked) {
@@ -217,7 +265,12 @@
     if (root && root.nodeType === 1 && root.hasAttribute && root.hasAttribute('src')) {
       const v = root.getAttribute('src');
       const m = maskForTag(root);
-      if (v && checkUrl(v, m) === 1) { markBlocked(root, v, m); root.removeAttribute('src'); }
+      if (v && checkUrl(v, m) === 1) {
+        markBlocked(root, v, m);
+        purgeBlocked(root);
+        try { root.removeAttribute('src'); } catch (e) {}
+        return;
+      }
     }
     if (!root || !root.querySelectorAll) return;
     let found;
@@ -228,6 +281,7 @@
       const m = maskForTag(el);
       if (v && checkUrl(v, m) === 1) {
         markBlocked(el, v, m);
+        purgeBlocked(el);
         try { el.removeAttribute(attr); } catch (e) {}
       }
     }
@@ -309,23 +363,34 @@
 
   // ── Guard verisi: loader köprüsü ───────────────────────────────────────────
   function init() {
+    // Yamaları HEMEN uygula — DOMContentLoaded beklenmez, aksi halde document_start
+    // ile DOMContentLoaded arasında koşan sayfa script'leri src setter yamasından
+    // kaçar (race condition). Guard verisi async gelir; geldiğinde tüm DOM taranır.
+    applyPatches();
     // Guard verisini iste (postMessage köprüsü → loader → background)
     window.postMessage({ prizmaVanguard: true, type: 'getGuard' }, '*');
-    applyPatches();
   }
 
+  let guardRefresh = 0;
   window.addEventListener('message', (ev) => {
     const d = ev.data;
     if (!d || d.prizmaVanguard !== true) return;
     if (d.type === 'guardData' && typeof d.json === 'string') {
       loadGuard(d.json);
       if (ready) scanInserted(document.documentElement);
+      // Çifte kalkan gecikmesi: webRequest blokları asenkron birikir; guard'ı
+      // birkaç kez tazele ki statik HTML script/iframe etiketleri de kaldırılsın
+      // (uBO HTML filtering eşdeğeri). Her tazelemede mevcut DOM yeniden taranır.
+      guardRefresh++;
+      if (guardRefresh < 6) {
+        setTimeout(() => {
+          window.postMessage({ prizmaVanguard: true, type: 'getGuard' }, '*');
+        }, 1000);
+      }
     }
   });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
+  // Enjeksiyon anında hemen başla — readyState'e bakma. Script document_start'ta
+  // head'e append edilir ve hemen çalışır; gecikme = kaçırılmış öğe = reklam.
+  init();
 })();

@@ -122,6 +122,12 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
     if (i + 3 <= line.size() && line.compare(i, 3, "#@#") == 0) {
       cf.is_exception = true;
       i += 3;
+      // B4: '#@#sel:style(...)' → C_STYLE exception. Aksi halde C_HIDE
+      // exception'ı üretilir; engine'de style iptali çalışmaz ve
+      // '##sel:style(...)' kuralı uygulanmaya devam eder.
+      if (line.find(":style(", i) != std::string::npos) {
+        cf.kind = C_STYLE;
+      }
     } else if (i + 3 <= line.size() && line.compare(i, 3, "#?#") == 0) {
       cf.kind = C_PROCEDURAL;
       i += 3;
@@ -141,6 +147,12 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
       } else {
         cf.kind = C_HIDE;
         i += 2;
+        // '##sel:style(...)' → C_STYLE (AdGuard/easy:style komutu).
+        // Yanlışlıkla C_HIDE olarak parse edilirse selector ':is()' füzyonuna
+        // girer ve tüm :is() grubunu geçersiz CSS'e çevirir.
+        if (line.find(":style(", i) != std::string::npos) {
+          cf.kind = C_STYLE;
+        }
       }
     } else {
       return out;  // tanınmayan '#x#' formu
@@ -327,6 +339,8 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
   bool important = false;
   bool is_regex = false;
   bool special_only = false;  // yalnızca özel/no-op seçenekler (ağ engelleme yok)
+  bool has_remove_param = false;
+  std::string remove_param;   // boş = tüm parametreler; ad ya da /regex/
   std::string regex_src;
   std::vector<DomainRule> domains;
 
@@ -378,8 +392,18 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
           // CSP filtresi: ilk sürümde yok say (engelleme değil, başlık enjeksiyonu)
         } else if (starts_with(opt, "redirect") || opt == "empty" || opt == "mp4") {
           // yönlendirme: ilk sürümde yok say
-        } else if (starts_with(opt, "removeparam") || starts_with(opt, "queryprune") || starts_with(opt, "replace=")) {
-          // parametre temizleme: ilk sürümde yok say
+        } else if (starts_with(opt, "removeparam") || starts_with(opt, "queryprune")) {
+          // Teknoloji 2: $removeparam / $queryprune — URL query parametresi
+          // temizleme. Değer boşsa TÜM parametreler silinir; değer düz ad ya da
+          // /regex/ olabilir (ad eşleşmeleri ayrıca büyük/küçük harf duyarsız).
+          has_remove_param = true;
+          const char* pre = starts_with(opt, "removeparam") ? "removeparam" : "queryprune";
+          const size_t pl = std::string(pre).size();
+          if (opt.size() > pl && opt[pl] == '=') {
+            remove_param = opt.substr(pl + 1);
+          }
+        } else if (starts_with(opt, "replace=")) {
+          // parametre değeri değiştirme: ilk sürümde yok say
         } else if (opt == "denyallow") {
           // yok say
         } else if (opt == "noop" || opt == "all" || opt == "popunder" || opt == "popup") {
@@ -418,6 +442,8 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
   nf.match_case = match_case;
   nf.is_badfilter = badfilter;
   nf.is_important = important;
+  nf.has_remove_param = has_remove_param;
+  nf.remove_param = remove_param;
   nf.domains = std::move(domains);
 
   if (is_regex) {

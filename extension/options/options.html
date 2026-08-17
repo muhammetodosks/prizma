@@ -108,6 +108,20 @@
       </div>
       <label class="switch"><input type="checkbox" data-setting="vanguardEnabled" checked><span class="slider"></span></label>
     </div>
+    <div class="setting">
+      <div>
+        <strong>Otomatik liste güncelleme</strong>
+        <p class="hint">Filtre listelerini her gün otomatik olarak güncel kaynaktan çeker (varsayılan 24 saat).</p>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="autoUpdateLists" checked><span class="slider"></span></label>
+    </div>
+    <div class="setting">
+      <div>
+        <strong>Güncelleme sıklığı</strong>
+        <p class="hint">Otomatik güncelleme aralığı (saat).</p>
+      </div>
+      <input type="number" id="updateIntervalHours" min="1" max="168" value="24" style="width:70px">
+    </div>
   </section>
 
   <footer>

@@ -76,7 +76,17 @@ function renderSettings(s) {
   document.querySelectorAll('input[data-setting]').forEach((input) => {
     input.checked = !!s[input.dataset.setting];
   });
+  if (s.updateIntervalHours) {
+    const iv = $('updateIntervalHours');
+    if (iv) iv.value = String(s.updateIntervalHours);
+  }
 }
+
+$('updateIntervalHours').addEventListener('change', async (ev) => {
+  const v = Math.max(1, Math.min(168, parseInt(ev.target.value, 10) || 24));
+  ev.target.value = String(v);
+  await browser.runtime.sendMessage({ type: 'setSetting', key: 'updateIntervalHours', value: v });
+});
 
 $('pauseToggle').addEventListener('change', async (ev) => {
   await browser.runtime.sendMessage({ type: 'togglePause' });
