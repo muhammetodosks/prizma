@@ -360,8 +360,16 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
         } else if (opt == "third-party" || opt == "3p") {
           party = P_THIRD;
           has_party = true;
+        } else if (opt == "~third-party" || opt == "~3p") {
+          // negasyon: ~third-party == first-party (uBO/AdGuard syntax'ı)
+          party = P_FIRST;
+          has_party = true;
         } else if (opt == "first-party" || opt == "1p") {
           party = P_FIRST;
+          has_party = true;
+        } else if (opt == "~first-party" || opt == "~1p") {
+          // negasyon: ~first-party == third-party
+          party = P_THIRD;
           has_party = true;
         } else if (opt == "important") {
           important = true;

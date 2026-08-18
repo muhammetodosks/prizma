@@ -6,18 +6,33 @@ d3ward %100 hedefi tamamlandı — hardcore listesi tek başına 131/131 d3ward 
 
 ### Filtre Listeleri
 
+- **`prizma-hardcore.txt` B2.1 bölümü (11 kural)**: adblock-tester.com canlı doğrulamasında kaçan 3P hostlar eklendi — `yastatic.net` (Yandex CDN), `js.sentry-cdn.com`/`browser.sentry-cdn.com`/`sentry-cdn.com`/`ingest.us.sentry.io` (Sentry), `ep1.adtrafficquality.google`/`adtrafficquality.google`, `static.hotjar.com`/`script.hotjar.com`, `d2wy8f7a9ursnm.cloudfront.net` (Hotjar CDN), `sessions.bugsnag.com` — hepsi `$third-party`
 - **`prizma-hardcore.txt` B5 bölümü (93 domain)**: d3ward.github.io testinin tüm ad/tracker domainleri eklendi (mobil/OEM: tiktok, unityads, xiaomi, oppo, hicloud, samsung, apple, yandex + analitik/örn: adcolony, mouseflow, freshmarketer, luckyorange, bugsnag, sentry, facebook pixel, twitter ads, linkedin, pinterest, reddit events, wp.com)
 - Hardcore listesi artık **tek başına** d3ward'ın 131 domaininin tamamını kapsar (d3host listesi olmasa bile %100)
 - d3ward doğrulama: type=256/16/8/128 hepsinde **131/131 (%100)**
 
 ### Motor (WASM)
 
+- **`~third-party` / `~1p` negasyonu eklendi (B16)**: uBO/AdGuard sözdiziminde `~third-party` = first-party, `~first-party` = third-party anlamına gelir. EasyList'teki `||adblock-tester.com/banners/$~third-party` (site-içi `pr_advertising_ads_banner.gif/.png/.swf` reklam dosyaları) artık tanınıyor → adblock-tester.com banner testleri geçti
 - **`prizma_last_rule()` çöp okuma düzeltildi (B15)**: `g_out` statik tamponu başlangıçta sıfırlanmıyordu → hiç eşleşme yokken bile rastgele bellek artığı dönebiliyordu. `prizma_new()` ve eşleşme-yok durumunda tampon temizlenir; background `extractRemoveParam` artık kural metni yerine çöp görüp ana sayfayı gereksiz engelleyemez
 - `g_out` temizleme kodunda gereksiz dallanma kaldırıldı (hacky kod temizliği)
+
+### Extension (JS)
+
+- **Sürümlenmiş liste cache anahtarı (B17)**: `loadListFromPackaged`/`updateListsRemote` önce `storage` cache'ini okuyordu; Firefox storage XPI yeniden paketlense de korunduğu için yeni kurallar canlıda asla yüklenmiyordu. Cache anahtarına manifest sürümü eklendi (`listdata.<id>.v<version>`) → XPI güncellenince cache otomatik geçersizleşir
+- Manifest sürümü 1.0.0 → **1.1.0** (git commit sürümüyle tutarlı)
+
+### Canlı Doğrulama (Firefox 153 + XPI)
+
+- **adblock-tester.com: 11/11 servis tam geçti** (ETP kapatılarak yalnızca Prizma ölçüldü; 0 üçüncü taraf kaynak yüklendi)
+- **turtlecute.org**: 0 yüklenen harici kaynak
+- **coveryourtracks.eff.org**: yalnızca kendi 1st-party statik dosyaları
+- **d3ward**: harness 4×131 (%100)
 
 ### Doğrulama
 
 - Regresyon harness (v3): **30/30 geçti** — d3ward 4×131, adblock-tester kritik 27/27, google.com pas (uBlock uyumlu), CYC 21/21 (18 blok + 3 bilinçli pas), mainframe 10/10 (prune ≠ cancel), exception, B15 temizlik
+- Canlı domain harness: **15/15** (yastatic.net, an.yandex.ru, sentry-cdn, hotjar, bugsnag dahil)
 - "19040" gizemi çözüldü: kural metni değil, `g_out` tamponunun bellekteki adresiydi (0x4A60). Harness'ler artık `readCStr` ile pointer'ı string'e çevirir
 
 ## 1.0.0 (2026-08-17)

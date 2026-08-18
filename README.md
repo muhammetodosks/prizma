@@ -6,6 +6,7 @@ Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engel
 
 - **VANGUARD DCP™ (Deterministic Creation-Prevention)** — uBO'nun yapmadığı şey: reklam öğesi *hiç oluşmaz*. `src`/`data`/`href`/`setAttribute`/`innerHTML`/`appendChild`/`insertBefore`/`document.write` setter'ları DOM prototip seviyesinde kesilir; main-world'de çalışan vanguard.js, senkron WASM Guard indeksiyle her kaynak URL'yi 5–10 µs'de değerlendirir. Öğe yoksa anti-adblock'un gizlemeyi tespit etme ihtimali de yoktur.
 - **Saf WASM C++ motor** — Filtre eşleştirme, JS'i çalıştırmayan native bir motorda yapılır. Motor WASM olarak derlenir ve tarayıcıya gömülür; JavaScript'te sadece ince bir köprü vardır.
+- **`~third-party` / `~1p` negasyonu** — uBO/AdGuard sözdiziminde `~third-party` = first-party anlamına gelir (örn. EasyList `||adblock-tester.com/banners/$~third-party` gibi site-içi reklam dosyalarını yakalar). `~first-party` / `~1p` = third-party.
 - **Filtre sözdizimi** (uBO/ABP uyumlu):
   - Ağ filtreleri: `||example.com^`, `|https://...|`, `*wildcard*`, `^` ayırıcıları
   - Seçenekler: `$script,image,third-party,domain=...,important,badfilter`
@@ -156,6 +157,13 @@ Prizma dört adblock test sitesinde tam puan hedefiyle doğrulanır:
 Test sitesi ana sayfaları `main_frame` olarak **asla third-party sayılmaz** (background.js B11) — siteler normal açılır. Üçüncü taraf reklam/tracker istekleri ise listeler + `prizma-hardcore.txt` (B5 bölümü dahil **93 ad/tracker domain**, `$third-party` kancaları) tarafından engellenir.
 
 **d3ward %100 (v1.1.0)**: `prizma-hardcore.txt` B5 bölümü d3ward.github.io'nun **131 domaininin tamamını tek başına kapsar** (d3host listesi olmasa bile). WASM harness ile type=256/16/8/128 hepsinde **131/131 (%100)** doğrulandı. Regresyon harness v3: **30/30** (d3ward 4×131, adblock-tester kritik 27/27, CYC 21/21 — 18 blok + 3 bilinçli pas, mainframe 10/10 prune≠cancel, google.com uBlock-uyumlu pas, B15 last_rule temizliği).
+
+**adblock-tester.com canlı %100 (v1.1.0)**: Firefox 153 + Prizma XPI (ETP kapatılarak, yalnızca Prizma'nın kendi engellemesi ölçüldü): **11/11 servis tam geçti** (Custom, Google AdSense, Yandex Direct, Google Analytics, Hotjar, Yandex.Metrica, Flash banners, Gif image, Static image, Sentry, Bugsnag) ve **0 üçüncü taraf kaynak yüklendi** (yalnızca kendi favicon'u). Bu sonuca iki kalıcı düzeltmeyle ulaşıldı:
+
+1. **`~third-party` parse fix'i** (`core/src/filter.cpp`): EasyList'teki `||adblock-tester.com/banners/$~third-party` kuralı (site-içi `pr_advertising_ads_banner.gif/.png/.swf` reklam dosyalarını yakalar) tanınmayan seçenek olduğu için düşürülüyordu. Negasyon desteği eklendi → banner testleri `File loading ✅ + Block visibility ✅`.
+2. **Sürümlenmiş liste cache anahtarı** (`extension/background/background.js`): `loadListFromPackaged`/`updateListsRemote` önce `storage` cache'ini okuyordu; Firefox storage XPI yeniden paketlense de korunduğu için yeni kurallar canlıda asla yüklenmiyordu. Cache anahtarına manifest sürümü eklendi (`listdata.<id>.v<version>`) → XPI güncellenince cache otomatik geçersizleşir.
+
+**turtlecute.org canlı**: 0 yüklenen harici kaynak, 0 görünür reklam öğesi. **coveryourtracks.eff.org canlı**: yalnızca kendi 1st-party statik dosyaları (favicon/font) yükleniyor; harici tracker yok.
 
 Beklenen kaçışlar ve eksik filtreler debug modunda (`log` sekmesi, `debug: true` satırları) yakalanır ve sonraki liste güncellemesine eklenir.
 

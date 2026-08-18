@@ -213,6 +213,21 @@
 ||yldbt.com^$third-party
 ||zedo.com^$third-party
 
+! ─── B2.1: adblock-tester.com canlı doğrulamada kaçanlar (2026-08-18) ───
+! Firefox canlı testi: yastatic.net partner-code-bundles 132KB ile yüklendi,
+! js.sentry-cdn.com fetch ile ikinci denemede kaçtı, adtrafficquality.google hiç yoktu.
+||yastatic.net^$third-party
+||js.sentry-cdn.com^$third-party
+||browser.sentry-cdn.com^$third-party
+||sentry-cdn.com^$third-party
+||ep1.adtrafficquality.google^$third-party
+||adtrafficquality.google^$third-party
+||static.hotjar.com^$third-party
+||script.hotjar.com^$third-party
+||d2wy8f7a9ursnm.cloudfront.net^$third-party
+||sessions.bugsnag.com^$third-party
+||ingest.us.sentry.io^$third-party
+
 ! ─── B3: Türkçe haber siteleri reklam sunucuları (test sitelerinde de var) ───
 ||reklamci.com^$third-party
 ||reklamatik.com^$third-party

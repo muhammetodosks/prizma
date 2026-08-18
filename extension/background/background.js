@@ -245,7 +245,13 @@ const PrizmaBG = (() => {
 
   // Bir listeyi yükle: storage cache → paket dosyası → canlı URL (sırayla dene)
   async function loadListFromPackaged(src) {
-    const cacheKey = 'listdata.' + src.id;
+    // Cache anahtarına manifest sürümü eklenir — XPI güncellendiğinde (paket
+    // listeleri değiştiğinde) eski cache otomatik geçersiz kalır ve paket
+    // dosyası yeniden okunur. (Firefox storage'ı XPI yeniden paketlense de
+    // koruduğu için sürümsüz cache, güncellenen kuralların canlıda asla
+    // yüklenmemesine yol açıyordu.)
+    const cacheVersion = (browser.runtime.getManifest && browser.runtime.getManifest().version) || '0';
+    const cacheKey = 'listdata.' + src.id + '.v' + cacheVersion;
     const got = await storageGet([cacheKey]);
     if (got[cacheKey]) {
       Prizma.loadList(got[cacheKey]);
@@ -295,7 +301,8 @@ const PrizmaBG = (() => {
       if (!src.url) continue; // yerel paket listesi (prizma-hardcore) çevrimiçi değil
       try {
         const text = await fetchText(src.url);
-        const cacheKey = 'listdata.' + src.id;
+        const cacheVersion = (browser.runtime.getManifest && browser.runtime.getManifest().version) || '0';
+        const cacheKey = 'listdata.' + src.id + '.v' + cacheVersion;
         await storageSet({ [cacheKey]: text });
         updated += 1;
       } catch (e) {
