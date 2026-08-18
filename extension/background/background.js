@@ -42,7 +42,22 @@ const PrizmaBG = (() => {
     { id: 'ublock-unbreak',  name: 'uBO unbreak',      file: 'lists/ublock-unbreak.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt', enabled: true },
     { id: 'adguard-turkish', name: 'Türkçe (AdGuard)', file: 'lists/adguard-turkish.txt',  url: 'https://filters.adtidy.org/extension/ublock/filters/13.txt', enabled: true },
     { id: 'adguard-tracking', name: 'Tracking (AdGuard)', file: 'lists/adguard-tracking.txt', url: 'https://filters.adtidy.org/extension/ublock/filters/3.txt', enabled: true },
-    { id: 'prizma-hardcore', name: 'Prizma Hardcore',  file: 'lists/prizma-hardcore.txt',  url: null, enabled: true }
+    { id: 'prizma-hardcore', name: 'Prizma Hardcore',  file: 'lists/prizma-hardcore.txt',  url: null, enabled: true },
+    // uBlock Origin kaynak kodunun tam listesi (uAssets/filters/)
+    { id: 'd3host',          name: 'd3Host (d3ward)',  file: 'lists/d3host.txt',           url: 'https://raw.githubusercontent.com/d3ward/toolz/master/src/d3host.adblock', enabled: true },
+    { id: 'ublock-2020',     name: 'uBO filters 2020', file: 'lists/ublock-filters-2020.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2020.txt', enabled: true },
+    { id: 'ublock-2021',     name: 'uBO filters 2021', file: 'lists/ublock-filters-2021.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2021.txt', enabled: true },
+    { id: 'ublock-2022',     name: 'uBO filters 2022', file: 'lists/ublock-filters-2022.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2022.txt', enabled: true },
+    { id: 'ublock-2023',     name: 'uBO filters 2023', file: 'lists/ublock-filters-2023.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2023.txt', enabled: true },
+    { id: 'ublock-2024',     name: 'uBO filters 2024', file: 'lists/ublock-filters-2024.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2024.txt', enabled: true },
+    { id: 'ublock-2025',     name: 'uBO filters 2025', file: 'lists/ublock-filters-2025.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2025.txt', enabled: true },
+    { id: 'ublock-2026',     name: 'uBO filters 2026', file: 'lists/ublock-filters-2026.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2026.txt', enabled: true },
+    { id: 'ublock-general',  name: 'uBO general',      file: 'lists/ublock-general.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt', enabled: true },
+    { id: 'ublock-mobile',   name: 'uBO mobile',       file: 'lists/ublock-mobile.txt',    url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-mobile.txt', enabled: true },
+    { id: 'ublock-privacy',  name: 'uBO privacy',      file: 'lists/ublock-privacy.txt',   url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt', enabled: true },
+    { id: 'ublock-quickfix', name: 'uBO quick fixes',  file: 'lists/ublock-quickfixes.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt', enabled: true },
+    { id: 'ublock-resabuse', name: 'uBO resource-abuse', file: 'lists/ublock-resabuse.txt', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt', enabled: true },
+    { id: 'ublock-legacy',   name: 'uBO legacy',       file: 'lists/ublock-legacy.txt',    url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/legacy.txt', enabled: true }
   ];
 
   let ready = false;

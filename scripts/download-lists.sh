@@ -35,6 +35,19 @@ fetch ublock-filters.txt    "https://raw.githubusercontent.com/uBlockOrigin/uAss
 fetch ublock-unbreak.txt    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt"
 fetch adguard-turkish.txt   "https://filters.adtidy.org/extension/ublock/filters/13.txt"
 fetch adguard-tracking.txt  "https://filters.adtidy.org/extension/ublock/filters/3.txt"
+# d3ward'ın kendi test listesi — d3ward.github.io/toolz/adblock %100 için gerekli
+# (uBlock Origin'in önerdiği liste; ads.tiktok.com gibi test domainlerini kapsar)
+fetch d3host.txt            "https://raw.githubusercontent.com/d3ward/toolz/master/src/d3host.adblock"
+# uBlock Origin kaynak kodunun TÜM filtre listeleri (uAssets/filters/)
+for y in 2020 2021 2022 2023 2024 2025 2026; do
+  fetch "ublock-filters-$y.txt" "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-$y.txt"
+done
+fetch ublock-general.txt    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt"
+fetch ublock-mobile.txt     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-mobile.txt"
+fetch ublock-privacy.txt    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt"
+fetch ublock-quickfixes.txt "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt"
+fetch ublock-resabuse.txt   "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt"
+fetch ublock-legacy.txt     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/legacy.txt"
 
 echo
-echo "Toplam: $(cat "$LISTS"/easylist.txt "$LISTS"/easyprivacy.txt "$LISTS"/ublock-filters.txt "$LISTS"/ublock-unbreak.txt "$LISTS"/adguard-turkish.txt "$LISTS"/adguard-tracking.txt 2>/dev/null | wc -l) satır"
+echo "Toplam: $(cat "$LISTS"/easylist.txt "$LISTS"/easyprivacy.txt "$LISTS"/ublock-filters.txt "$LISTS"/ublock-unbreak.txt "$LISTS"/adguard-turkish.txt "$LISTS"/adguard-tracking.txt "$LISTS"/d3host.txt "$LISTS"/ublock-filters-*.txt "$LISTS"/ublock-general.txt "$LISTS"/ublock-mobile.txt "$LISTS"/ublock-privacy.txt "$LISTS"/ublock-quickfixes.txt "$LISTS"/ublock-resabuse.txt "$LISTS"/ublock-legacy.txt 2>/dev/null | wc -l) satır"

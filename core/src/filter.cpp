@@ -48,7 +48,10 @@ bool parse_type_option(const std::string& opt, uint32_t& bits) {
       {"image", T_IMAGE},           {"img", T_IMAGE},
       {"object", T_OBJECT},         {"object-subrequest", T_OBJECT},
       {"media", T_MEDIA},
-      {"xmlhttprequest", T_XHR},    {"xhr", T_XHR},
+      // B14: uBlock Origin spec — $xhr == xmlhttprequest + fetch (ikisi birden).
+      //      d3ward vb. testler fetch(HEAD) yapar; tek bit'e map edilirse kaçar.
+      {"xmlhttprequest", T_XHR},
+      {"xhr", static_cast<uint32_t>(T_XHR | T_FETCH)},
       {"fetch", T_FETCH},
       {"font", T_FONT},
       {"websocket", T_WEBSOCKET},

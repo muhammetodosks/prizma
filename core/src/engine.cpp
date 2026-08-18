@@ -207,8 +207,20 @@ bool Engine::check_options(const NetworkFilter& f, uint32_t type_bit,
 }
 
 bool Engine::is_badfilter_match(const NetworkFilter& a, const NetworkFilter& b) const {
-  return a.pattern == b.pattern && a.hostname_anchor == b.hostname_anchor &&
-         a.anchor_start == b.anchor_start && a.anchor_end == b.anchor_end;
+  if (a.pattern != b.pattern) return false;
+  if (a.hostname_anchor != b.hostname_anchor) return false;
+  if (a.anchor_start != b.anchor_start) return false;
+  if (a.anchor_end != b.anchor_end) return false;
+  if (a.is_exception != b.is_exception) return false;
+  if (a.match_case != b.match_case) return false;
+  if (a.type_bits != b.type_bits) return false;
+  if (a.has_party != b.has_party || (a.has_party && a.party != b.party)) return false;
+  if (a.domains.size() != b.domains.size()) return false;
+  for (size_t i = 0; i < a.domains.size(); ++i) {
+    if (a.domains[i].negative != b.domains[i].negative) return false;
+    if (a.domains[i].name != b.domains[i].name) return false;
+  }
+  return true;
 }
 
 bool Engine::filter_cancelled(const NetworkFilter& f) const {
@@ -319,7 +331,15 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
       // C++'ta derlenemeyen (lookahead vb.) regex'ler JS-Native RegExp
       // motoruna devredilir — burada sessizce atlanmaz.
       if (!rf.re_ok) continue;
-      if (!std::regex_search(url, rf.re)) continue;
+      bool re_match = false;
+      try {
+        re_match = std::regex_search(url, rf.re);
+      } catch (const std::regex_error&) {
+        // B13: catastrophic backtracking / complexity aşımı → bu istek için
+        //      kuralı sessizce atla (blok yanlış pozitifinden iyidir).
+        continue;
+      }
+      if (!re_match) continue;
       if (rf.is_exception) {
         if (rf.is_important) {
           if (!allow_imp_re) { allow_imp_re = true; allow_imp_re_raw = rf.raw; }

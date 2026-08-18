@@ -11,11 +11,19 @@ extern "C" {
 
 static Engine* g_engine = nullptr;
 static char g_out[65536];
-static bool g_out_owned = false;
+
+// B15: g_out tamponu başlangıçta sıfırlanmalı — statik bellek WASM sayfa
+// artığı içerebilir ve prizma_last_rule() hiç eşleşme yokken bile "çöp"
+// döndürürdü. background.js bu çöpü kural sanıp main_frame'i gereksiz
+// engelliyordu (extractRemoveParam çöp üzerinde null döner → cancel).
+static inline void reset_out() {
+  g_out[0] = '\0';
+}
 
 // Yeni motor (tek örnek; tekil yeterli).
 void* prizma_new() {
   if (g_engine == nullptr) g_engine = new Engine();
+  reset_out();
   return g_engine;
 }
 
@@ -56,7 +64,7 @@ int prizma_cosmetic_filter_count() {
 // Eşleşen kural metni prizma_last_rule() ile alınır.
 int prizma_match(const char* url, int type_bit, const char* hostname,
                  const char* doc_hostname, int third_party) {
-  if (!g_engine || !url) return -1;
+  if (!g_engine || !url) { reset_out(); return -1; }
   Engine::MatchResult r = g_engine->match(
       url, static_cast<uint32_t>(type_bit),
       hostname ? hostname : "", doc_hostname ? doc_hostname : "",
@@ -66,6 +74,9 @@ int prizma_match(const char* url, int type_bit, const char* hostname,
       std::memcpy(g_out, r.rule_raw.data(), r.rule_raw.size());
       g_out[r.rule_raw.size()] = '\0';
     }
+  } else {
+    // B15: eşleşme yoksa tamponu temizle — eski kural metni kalmasın.
+    reset_out();
   }
   return r.action;
 }
