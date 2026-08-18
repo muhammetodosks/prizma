@@ -153,7 +153,11 @@ Prizma dört adblock test sitesinde tam puan hedefiyle doğrulanır:
 - **d3ward.github.io** (toolbox)
 - **coveryourtracks.eff.org** (Cover Your Tracks)
 
-Test sitesi ana sayfaları `main_frame` olarak **asla third-party sayılmaz** (background.js B11) — siteler normal açılır. Üçüncü taraf reklam/tracker istekleri ise listeler + `prizma-hardcore.txt` (37+ ad/tracker domain, `$third-party` kancaları dahil) tarafından engellenir. Beklenen kaçışlar ve eksik filtreler debug modunda (`log` sekmesi, `debug: true` satırları) yakalanır ve sonraki liste güncellemesine eklenir.
+Test sitesi ana sayfaları `main_frame` olarak **asla third-party sayılmaz** (background.js B11) — siteler normal açılır. Üçüncü taraf reklam/tracker istekleri ise listeler + `prizma-hardcore.txt` (B5 bölümü dahil **93 ad/tracker domain**, `$third-party` kancaları) tarafından engellenir.
+
+**d3ward %100 (v1.1.0)**: `prizma-hardcore.txt` B5 bölümü d3ward.github.io'nun **131 domaininin tamamını tek başına kapsar** (d3host listesi olmasa bile). WASM harness ile type=256/16/8/128 hepsinde **131/131 (%100)** doğrulandı. Regresyon harness v3: **30/30** (d3ward 4×131, adblock-tester kritik 27/27, CYC 21/21 — 18 blok + 3 bilinçli pas, mainframe 10/10 prune≠cancel, google.com uBlock-uyumlu pas, B15 last_rule temizliği).
+
+Beklenen kaçışlar ve eksik filtreler debug modunda (`log` sekmesi, `debug: true` satırları) yakalanır ve sonraki liste güncellemesine eklenir.
 
 ## Lisans
 
