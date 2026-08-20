@@ -112,7 +112,7 @@ scripts/build-wasm.sh         # → extension/wasm/prizma.{js,wasm}
 npx web-ext lint --source-dir extension
 
 # 5) XPI paketle
-packaging/build-xpi.sh        # → release/prizma-1.1.0.xpi
+packaging/build-xpi.sh        # → release/prizma-1.1.1.xpi
 ```
 
 ### Emscripten
@@ -126,7 +126,7 @@ source /home/mami/emsdk/emsdk_env.sh
 
 ## Kurulum (Firefox)
 
-1. `release/prizma-1.1.0.xpi` dosyasını aç — Firefox kurulumu onaylar.
+1. `release/prizma-1.1.1.xpi` dosyasını aç — Firefox kurulumu onaylar.
 2. Ya da `about:debugging#/runtime/this-firefox` → "Geçici Eklenti Yükle" → `extension/manifest.json`.
 3. Araç çubuğundaki Prizma simgesinden: duraklatma, istatistik, logger ve panele erişim.
 4. Kısayol: `Alt+Shift+P` — Prizma'yı duraklat/devam ettir.
