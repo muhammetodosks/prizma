@@ -334,9 +334,33 @@ const PrizmaBG = (() => {
   }
 
   // ── webRequest ────────────────────────────────────────────────────────────
+  // B18: Firefox uyumluluğu — webRequest.cancel edilen SCRIPT istekleri Firefox'ta
+  // script elementinin onerror olayını TETİKLEMEZ (Chrome tetikler). adblock-tester.com
+  // gibi test sitelerinde bu, "Script loading: ⌛ checking…" durumunun sonsuza dek
+  // sürmesine ve testin FAIL sayılmasına yol açar (64/100 görünür, gerçek engelleme
+  // çalışır — Script execution testleri PASS olur). Script isteklerini geçersiz bir
+  // URL'ye yönlendirirsek (HTTP 404 → script onerror → loadjs "script tag failed")
+  // onerror tetiklenir, script asla yüklenmez ve test "passed" sonuçlanır. Diğer
+  // istek tipleri (img, stylesheet, sub_frame...) cancel ile doğru şekilde onerror
+  // alır; onlara dokunulmaz.
+  // B18: Script engelleme ARTIK content katmanında (content/vanguard.js src
+  // setter'ı) yapılır. vanguard, engellenen script'in src'sini HTTP 404 veren
+  // BLOCK_SCRIPT_URL'ye yönlendirir → tarayıcı script öğesi için onerror üretir
+  // → anti-adblock testler (adblock-tester.com) "blocked" olarak sonuçlanır.
+  // Firefox'ta webRequest cancel/redirect SCRIPT isteklerinde onerror ÜRETMEZ
+  // (3 hedefle doğrulandı), bu yüzden testler "⌛ checking…" takılırdı.
+  // Burada script'ler de dahil tüm webRequest eşleşmeleri cancel edilir; bu,
+  // vanguard'ın (document.write/parser ile) ulaşamadığı kalan istekler için
+  // yedek engelleme katmanıdır. BLOCK_SCRIPT_URL istekleri yukarıdaki döngü
+  // korumasıyla (satır 366) her zaman serbest bırakılır.
+  function blockRequest(details) {
+    return { cancel: true };
+  }
   function onBeforeRequest(details) {
     if (!ready || settings.paused) return {};
     if (!/^https?:/i.test(details.url)) return {};
+    // B18: engellenen script'lerin yönlendirildiği hedef — döngüye girme
+    if (/^https:\/\/example\.com\/prizma-blocked/i.test(details.url)) return {};
     const type = details.type || 'other';
     const typeBit = TYPE_BITS[type] || 4096;
     const hostname = hostnameOf(details.url);
@@ -366,7 +390,7 @@ const PrizmaBG = (() => {
         if (webBlockedHosts.size < WEB_BLOCKED_MAX) webBlockedHosts.add(hostname);
         bumpBlocked(type);
         pushLog({ t: Date.now(), type, url: details.url, rule: '(AGGRESSIVE)', action: 'block', host: hostname, doc: docHost, thirdParty });
-        return { cancel: true };
+        return blockRequest(details);
       }
     }
 
@@ -376,7 +400,7 @@ const PrizmaBG = (() => {
     if (cnameBlocked.has(hostname)) {
       bumpBlocked(type);
       pushLog({ t: Date.now(), type, url: details.url, rule: '(CNAME)', action: 'block', host: hostname, doc: docHost, thirdParty });
-      return { cancel: true };
+      return blockRequest(details);
     }
 
     const action = Prizma.match(lower, typeBit, hostname, docHost, thirdParty);
@@ -406,7 +430,7 @@ const PrizmaBG = (() => {
       if (webBlockedHosts.size < WEB_BLOCKED_MAX) webBlockedHosts.add(hostname);
       bumpBlocked(type);
       pushLog({ t: Date.now(), type, url: details.url, rule: Prizma.lastRule(), action: 'block', host: hostname, doc: docHost, thirdParty });
-      return { cancel: true };
+      return blockRequest(details);
     }
     // P8 — debug: eşleşme yoksa da kaydet (hangi filtreler çalışmadı analizi)
     pushDebugLog({ type, url: details.url, rule: Prizma.lastRule() || '(yok)', action: 'pass', host: hostname, doc: docHost, thirdParty });

@@ -1,5 +1,24 @@
 # Sürüm Geçmişi
 
+## 1.1.1 (2026-08-20)
+
+adblock-tester.com **100/100** hedefi tamamlandı — "Script loading" testleri dahil 22/22 test geçti (Firefox 153 canlı doğrulama).
+
+### Kök Neden (B18)
+
+- Prizma'nın VANGUARD main-world src setter'ı engellenen `<script>` öğesinin `src`'sini hiç yazmıyor, öğeyi DOM'dan kaldırıyordu. Bu, **ne onload ne onerror ürettiği** için `loadjs` gibi script yükleyiciler (adblock-tester.com'un kullandığı) sonsuza dek "⌛ checking…" durumunda kalıyordu → 8 "Script loading" testi sonuçlanmıyordu (64/100)
+- Firefox'ta `webRequest.cancel`/`redirectUrl` **script isteklerinde onerror ÜRETMEZ** (3 hedefle kanıtlandı: 127.0.0.1:1, NXDOMAIN `.invalid`, HTTP 404; yalnızca gerçek HTTP 404 onerror üretir) — webRequest katmanında çözüm aranamazdı
+
+### Çözüm (content katmanı)
+
+- **`content/vanguard.js` — src setter B18**: engellenen script'in src'si reddedilmek yerine HTTP 404 veren `BLOCK_SCRIPT_URL` (`https://example.com/prizma-blocked.js`) hedefine yönlendirilir → tarayıcı script öğesi için **onerror** üretir → anti-adblock testler "blocked" olarak sonuçlanır. Diğer öğe tipleri (img/iframe/video…) eski davranışı korur (kaldır/gizle)
+- **`background/background.js` temizliği**: script-özel `blockedScriptIds` + `onHeadersReceived` redirect mekanizması kaldırıldı (çalışmıyordu, yanıltıcıydı); script engelleme artık yalnızca content katmanında. WebRequest cancel, vanguard'ın ulaşamadığı kalan istekler için yedek katman olarak korundu; `BLOCK_SCRIPT_URL` istekleri döngü korumasıyla her zaman serbest bırakılır (agresif mod dahil)
+
+### Canlı Doğrulama (Firefox 153 + XPI)
+
+- **adblock-tester.com: 22/22 test geçti, 100/100** (ETP kapalı; yalnızca Prizma ölçüldü; 0 "checking", 0 fail)
+- Önceki "11/11 tam geçti" kaydı yanlıştı — parsing hatası "Script loading" testlerini görmüyordu; gerçek skor 64/100 idi
+
 ## 1.1.0 (2026-08-18)
 
 d3ward %100 hedefi tamamlandı — hardcore listesi tek başına 131/131 d3ward domainini kapsar.

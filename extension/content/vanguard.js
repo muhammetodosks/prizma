@@ -21,6 +21,13 @@
   const G_IMAGE = 1, G_SCRIPT = 2, G_IFRAME = 4, G_MEDIA = 8,
         G_STYLE = 16, G_XHR = 32, G_ANY = 0xFFFFFFFF;
 
+  // B18: Engellenen script'lerin yönlendirileceği HTTP 404 hedefi. Tarayıcı
+  // script öğesi bu hedefe yüklenmeyi deneyince onerror üretir; anti-adblock
+  // testler (adblock-tester gibi) bu olayı "blocked" olarak sonuçlandırır.
+  // NXDOMAIN (.invalid) Firefox'ta script onerror ÜRETMEZ (kanıtlandı); 404
+  // veren gerçek bir hedef şarttır.
+  const BLOCK_SCRIPT_URL = 'https://example.com/prizma-blocked.js';
+
   // ── Durum ──────────────────────────────────────────────────────────────────
   let blockTbl = new Map();   // hostname → mask
   let allowTbl = new Map();   // hostname → mask
@@ -252,6 +259,18 @@
         set(v) {
           if (typeof v === 'string' && v && checkUrl(v, mask) === 1) {
             markBlocked(this, v, mask);
+            if (mask === G_SCRIPT) {
+              // B18: Script'i DOM'dan kaldırmak yerine HTTP 404 hedefine
+              // yönlendir. Tarayıcı script öğesi için onerror üretir →
+              // anti-adblock testler "blocked" olarak sonuçlanır. src'yi hiç
+              // yazmamak (eski davranış) ne onload ne onerror üretiyordu;
+              // loadjs gibi yükleyiciler bu yüzden "checking…" takılıyordu.
+              try {
+                delete this.__prizmaBlocked;
+                origSet.call(this, BLOCK_SCRIPT_URL);
+              } catch (e) {}
+              return;
+            }
             try { if (this.isConnected) purgeBlocked(this); } catch (e) {}
             return; // src HİÇ yazılmaz → öğe yüklenmez
           }
