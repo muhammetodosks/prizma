@@ -1,0 +1,186 @@
+name: Prizma CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 6 * * 0'  # haftada bir pazar sabah 06:00
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.61'
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Update filter lists
+        run: |
+          chmod +x scripts/download-lists.sh
+          ./scripts/download-lists.sh -f
+          cp -f lists/*.txt extension/lists/
+
+      - name: Build WASM
+        run: |
+          chmod +x scripts/build-wasm.sh
+          ./scripts/build-wasm.sh
+
+      - name: Run unit tests (native)
+        run: |
+          cd core
+          g++ -std=c++17 -O2 -Isrc -o test_engine tests/test_engine.cpp src/*.cpp
+          ./test_engine
+          g++ -std=c++17 -O2 -Isrc -o test_unicode tests/test_unicode_bug.cpp src/*.cpp
+          ./test_unicode
+
+      - name: Build XPI
+        run: |
+          chmod +x packaging/build-xpi.sh
+          ./packaging/build-xpi.sh
+        env:
+          XPI_VERSION: ${{ github.ref == 'refs/heads/master' && 'dev' || github.sha }}
+
+      - name: Upload XPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prizma-xpi
+          path: release/prizma-*.xpi
+          retention-days: 30
+
+  browser-test:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download XPI
+        uses: actions/download-artifact@v4
+        with:
+          name: prizma-xpi
+          path: release/
+
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: 'latest'
+
+      - name: Install geckodriver
+        run: |
+          GECKO_VERSION=$(curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep tag_name | cut -d '"' -f 4)
+          curl -sL "https://github.com/mozilla/geckodriver/releases/download/${GECKO_VERSION}/geckodriver-${GECKO_VERSION}-linux64.tar.gz" | tar -xz
+          sudo mv geckodriver /usr/local/bin/
+          geckodriver --version
+
+      - name: Install Python deps
+        run: |
+          pip install selenium
+
+      - name: Run adblock-tester.com test
+        run: |
+          XPI=$(ls release/prizma-*.xpi | head -1)
+          python3 -c "
+import sys, time
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
+
+opts = Options()
+opts.add_argument('-headless')
+opts.set_preference('xpinstall.signatures.required', False)
+opts.set_preference('extensions.autoDisableScopes', 0)
+opts.set_preference('extensions.enabledScopes', 15)
+opts.set_preference('network.http.use-cache', False)
+opts.set_preference('privacy.trackingprotection.enabled', False)
+opts.set_preference('privacy.trackingprotection.pbmode.enabled', False)
+opts.set_preference('browser.contentblocking.category', 'none')
+opts.accept_insecure_certs = True
+
+driver = webdriver.Firefox(options=opts, service=Service('/usr/local/bin/geckodriver'))
+driver.install_addon('$XPI', temporary=True)
+time.sleep(30)
+driver.get('https://adblock-tester.com/')
+time.sleep(60)
+score = driver.find_element('css selector', '.final-score-value').text
+print(f'SKOR: {score}/100')
+checking = driver.execute_script('return Array.from(document.querySelectorAll(\"div.block.service\")).filter(b => b.textContent.includes(\"checking\")).length')
+fails = driver.execute_script('return Array.from(document.querySelectorAll(\"div.block.service\")).filter(b => b.textContent.includes(\"❌\")).length')
+print(f'checking: {checking}, fails: {fails}')
+assert score == '100', f'Expected 100, got {score}'
+assert checking == 0, f'checking tests remain: {checking}'
+assert fails == 0, f'failed tests: {fails}'
+driver.quit()
+print('✅ 100/100 confirmed')
+"
+        env:
+          DISPLAY: ':99'
+        timeout-minutes: 10
+
+      - name: Run other test sites
+        run: |
+          XPI=$(ls release/prizma-*.xpi | head -1)
+          python3 -c "
+import sys, time
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
+
+opts = Options()
+opts.add_argument('-headless')
+opts.set_preference('xpinstall.signatures.required', False)
+opts.set_preference('extensions.autoDisableScopes', 0)
+opts.set_preference('extensions.enabledScopes', 15)
+opts.set_preference('network.http.use-cache', False)
+opts.set_preference('privacy.trackingprotection.enabled', False)
+opts.set_preference('privacy.trackingprotection.pbmode.enabled', False)
+opts.set_preference('browser.contentblocking.category', 'none')
+opts.accept_insecure_certs = True
+
+driver = webdriver.Firefox(options=opts, service=Service('/usr/local/bin/geckodriver'))
+driver.install_addon('$XPI', temporary=True)
+time.sleep(30)
+
+for url, name in [
+    ('https://turtlecute.org/', 'turtlecute'),
+    ('https://d3ward.github.io/toolz/adblock/', 'd3ward'),
+    ('https://coveryourtracks.eff.org/', 'coveryourtracks')
+]:
+    driver.get(url)
+    time.sleep(15)
+    loaded = driver.execute_script('return performance.getEntriesByType(\"resource\").filter(r => r.initiatorType !== \"xmlhttprequest\").length')
+    print(f'{name}: {loaded} external resources')
+    assert loaded == 0, f'{name} has external resources: {loaded}'
+
+driver.quit()
+print('✅ All test sites: 0 external resources')
+"
+        env:
+          DISPLAY: ':99'
+        timeout-minutes: 10
+
+  release:
+    needs: [build-and-test, browser-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download XPI
+        uses: actions/download-artifact@v4
+        with:
+          name: prizma-xpi
+          path: release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Prizma ${{ github.run_number }}
+          files: release/prizma-*.xpi
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

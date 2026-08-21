@@ -1,5 +1,7 @@
 # Prizma
 
+![CI](https://github.com/muhammetodosks/prizma/workflows/Prizma%20CI/CD/badge.svg)
+
 Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engelleyici. uBlock Origin'e rakip olarak tasarlandı: aynı filtre listelerini (EasyList, EasyPrivacy, uBO, AdGuard Türkçe + **AdGuard Tracking**) ve uBO scriptlet sözdizimini destekler, güçlü cosmetic filtreleme, gerçek zamanlı istatistik/logger, manuel liste güncelleme, debug modu ve **VANGUARD DCP™** — DOM prototip seviyesinde reklam öğesini oluşmadan önce yok eden dünyada ilk deterministik önleme teknolojisi.
 
 ## Özellikler
