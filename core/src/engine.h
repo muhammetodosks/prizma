@@ -20,6 +20,11 @@ class Engine {
   Engine(Engine&&) = default;
   Engine& operator=(const Engine&) = delete;
 
+  // Debug logging: PRIZMA_DEBUG=1 ortam değişkeniyle aktif edilir.
+  // Eşleşen kural, öncelik, domain sonucu detaylı loglanır.
+  static void set_debug(bool enabled) { debug_enabled_ = enabled; }
+  static bool debug_enabled() { return debug_enabled_; }
+
   // Filtre listesi metnini yükler (çoğul çağrı birleştirir).
   void load_list(const std::string& text);
   void clear();
@@ -49,7 +54,7 @@ class Engine {
 
   // ── Regex dışa aktarımı (JS-Native RegExp motoru) ─────────────────────────
   // C++ std::regex'in desteklemediği (lookahead/lookbehind/named-group vb.)
-  // regex filtrelerini JS'e devretmek için JSON array döndürür.
+  // regex filtreleri JS'e devretmek için JSON array döndürür.
   // Her eleman: {s:src, raw, e:exception, i:important, m:match_case,
   //              t:type_bits, p:party, hp:has_party, d:[[name,neg]...],
   //              ok:re_ok, tok:token}
@@ -67,6 +72,8 @@ class Engine {
   std::string stats_json() const;
 
  private:
+  static bool debug_enabled_;
+
   struct RegexFilter {
     uint32_t id;
     std::string raw;
@@ -82,7 +89,6 @@ class Engine {
     std::regex re;      // load_list'te bir kez derlenir (performans)
     bool re_ok = false; // derleme başarılı mı? (false → JS tarafına devreder)
   };
-
 
   std::vector<NetworkFilter> nets_;        // id-ordered (index)
   std::vector<NetworkFilter> brute_;       // token'sız normal filtreler

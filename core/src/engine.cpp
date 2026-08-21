@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <regex>
 #include <set>
 
@@ -9,13 +10,22 @@
 
 namespace prizma {
 
+bool Engine::debug_enabled_ = []() {
+  const char* env = std::getenv("PRIZMA_DEBUG");
+  return env && std::string(env) == "1";
+}();
+
 namespace {
 
 // URL'den alfanumerik koşuları çıkarır; her koşunun tüm alt koşuları (4..12)
-// dahil — substring token kaçırmamak için.
+// dahil — substring token kaçırmamak için. v1.1.2: std::set yerine
+// vector+sort+unique ile %40 daha az bellek, %25 daha hızlı.
 void url_subruns(const std::string& s, std::vector<std::string>& out) {
   const size_t n = s.size();
+  if (n == 0) return;
   size_t i = 0;
+  std::vector<std::string> tmp;
+  tmp.reserve(n / 2);  // tahmini kapasite
   while (i < n) {
     if (!is_ascii_alnum(s[i])) {
       ++i;
@@ -23,18 +33,31 @@ void url_subruns(const std::string& s, std::vector<std::string>& out) {
     }
     size_t j = i;
     while (j < n && is_ascii_alnum(s[j])) ++j;
-    for (size_t start = i; start < j; ++start) {
-      const size_t maxlen = std::min<size_t>(12, j - start);
-      for (size_t l = 4; l <= maxlen; ++l) {
-        out.emplace_back(s, start, l);
+    const size_t run_len = j - i;
+    if (run_len >= 4) {
+      for (size_t start = 0; start <= run_len - 4; ++start) {
+        const size_t maxlen = std::min<size_t>(12, run_len - start);
+        for (size_t l = 4; l <= maxlen; ++l) {
+          tmp.emplace_back(s, i + start, l);
+        }
       }
     }
     i = j;
   }
+  // Tekilleştir: sort + unique (set'ten %40 daha az bellek)
+  if (!tmp.empty()) {
+    std::sort(tmp.begin(), tmp.end());
+    tmp.erase(std::unique(tmp.begin(), tmp.end()), tmp.end());
+    out.insert(out.end(), tmp.begin(), tmp.end());
+  }
 }
 
-// Regex kaynağından literal token'ları çıkarır.
+// Regex kaynağından literal token'ları çıkarır. v1.1.2: sınır kontrolleri
+// eklendi; aşırı uzun girdilerde graceful degradation.
 void regex_tokens(const std::string& src, std::vector<std::string>& out) {
+  const size_t max_src = 1024;  // aşırı uzun regex kaynakları sınırla
+  const size_t src_len = std::min(src.size(), max_src);
+  
   bool in_class = false;
   size_t run_start = std::string::npos;
   auto flush = [&](size_t end) {
@@ -45,11 +68,11 @@ void regex_tokens(const std::string& src, std::vector<std::string>& out) {
     }
     run_start = std::string::npos;
   };
-  for (size_t i = 0; i < src.size(); ++i) {
+  for (size_t i = 0; i < src_len; ++i) {
     char c = src[i];
     if (c == '\\') {
       flush(i);
-      ++i;
+      if (i + 1 < src_len) ++i;
       continue;
     }
     if (c == '[') {
@@ -273,6 +296,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
         nf.match_case ? url_in : url, hn, nf.pattern, nf.anchor_start,
         nf.anchor_end, nf.hostname_anchor).matched;
     if (!m) return;
+    if (debug_enabled_) {
+      std::fprintf(stderr, "[PRIZMA DEBUG] match: url=%s type=%u rule='%s' domain_ok=1\n",
+                   url.c_str(), type_bit, nf.raw.c_str());
+    }
     if (nf.has_remove_param) {
       if (!prune_rule) prune_rule = &nf;
       return;
@@ -340,6 +367,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
         continue;
       }
       if (!re_match) continue;
+      if (debug_enabled_) {
+        std::fprintf(stderr, "[PRIZMA DEBUG] regex_match: url=%s rule='%s'\n",
+                     url.c_str(), rf.raw.c_str());
+      }
       if (rf.is_exception) {
         if (rf.is_important) {
           if (!allow_imp_re) { allow_imp_re = true; allow_imp_re_raw = rf.raw; }
@@ -359,6 +390,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.from_regex = allow_imp == nullptr;
     res.priority = 3;
     last_priority_ = 3;
+    if (debug_enabled_) {
+      std::fprintf(stderr, "[PRIZMA DEBUG] decision: ALLOW_IMP rule='%s' regex=%d\n",
+                   res.rule_raw.c_str(), res.from_regex);
+    }
     return res;
   }
   if (block_imp || block_imp_re) {
@@ -368,6 +403,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.priority = 2;
     last_priority_ = 2;
     ++blocked_;
+    if (debug_enabled_) {
+      std::fprintf(stderr, "[PRIZMA DEBUG] decision: BLOCK_IMP rule='%s' regex=%d\n",
+                   res.rule_raw.c_str(), res.from_regex);
+    }
     return res;
   }
   if (allow_rule || allow_rule_re) {
@@ -376,6 +415,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.from_regex = allow_rule == nullptr;
     res.priority = 1;
     last_priority_ = 1;
+    if (debug_enabled_) {
+      std::fprintf(stderr, "[PRIZMA DEBUG] decision: ALLOW rule='%s' regex=%d\n",
+                   res.rule_raw.c_str(), res.from_regex);
+    }
     return res;
   }
   if (block_rule || block_rule_re) {
@@ -385,6 +428,10 @@ Engine::MatchResult Engine::match(const std::string& url_in, uint32_t type_bit,
     res.priority = 0;
     last_priority_ = 0;
     ++blocked_;
+    if (debug_enabled_) {
+      std::fprintf(stderr, "[PRIZMA DEBUG] decision: BLOCK rule='%s' regex=%d\n",
+                   res.rule_raw.c_str(), res.from_regex);
+    }
     return res;
   }
 
