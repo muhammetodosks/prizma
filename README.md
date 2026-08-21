@@ -1,5 +1,7 @@
 # Prizma
 
+![Prizma Banner](docs/banner.png)
+
 ![CI](https://github.com/muhammetodosks/prizma/workflows/Prizma%20CI/CD/badge.svg)
 ![Version](https://img.shields.io/github/v/release/muhammetodosks/prizma?label=v1.1.2)
 ![License](https://img.shields.io/github/license/muhammetodosks/prizma)
