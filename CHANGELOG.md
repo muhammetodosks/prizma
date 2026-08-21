@@ -19,6 +19,25 @@ adblock-tester.com **100/100** hedefi tamamlandı — "Script loading" testleri 
 - **adblock-tester.com: 22/22 test geçti, 100/100** (ETP kapalı; yalnızca Prizma ölçüldü; 0 "checking", 0 fail)
 - Önceki "11/11 tam geçti" kaydı yanlıştı — parsing hatası "Script loading" testlerini görmüyordu; gerçek skor 64/100 idi
 
+### Geliştirmeler (v1.1.1 sonrası)
+
+- **Filtre listeleri güncellendi**: EasyList, EasyPrivacy, uBO filters (2020-2026), AdGuard Türkçe/Tracking, d3host — toplam **524.064 satır** (+346)
+- **CI/CD Pipeline** (`.github/workflows/ci.yml`): GitHub Actions ile otomatik
+  - Haftalık liste güncelleme (pazar 06:00)
+  - WASM derleme (emsdk)
+  - Unit testler (183 native + unicode)
+  - XPI build + artifact upload
+  - Firefox headless browser testleri: adblock-tester.com 100/100 + turtlecute/d3ward/CYC 0 harici kaynak
+  - Master branch push'ta otomatik GitHub Release
+- **Unit testler**: 183/183 native + unicode bug test geçti
+- **Performans** (Firefox 153 headless, Prizma aktif):
+  - adblock-tester.com: 0 harici kaynak, load ~3.1s
+  - turtlecute.org / d3ward: 0 kaynak, load ~0.5-0.6s
+  - coveryourtracks.eff.org: 3 first-party (font/favicon)
+  - Google/YouTube/GitHub: first-party kaynaklar normal yükleniyor
+- **README**: CI badge eklendi, XPI referansları 1.1.1
+- Manifest sürümü **1.1.1** (git tag v1.1.1)
+
 ## 1.1.0 (2026-08-18)
 
 d3ward %100 hedefi tamamlandı — hardcore listesi tek başına 131/131 d3ward domainini kapsar.
