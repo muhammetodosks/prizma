@@ -1,42 +1,42 @@
 # Prizma
 
 ![CI](https://github.com/muhammetodosks/prizma/workflows/Prizma%20CI/CD/badge.svg)
+![Version](https://img.shields.io/github/v/release/muhammetodosks/prizma?label=v1.1.2)
+![License](https://img.shields.io/github/license/muhammetodosks/prizma)
+![Firefox](https://img.shields.io/badge/Firefox-128%2B-orange)
 
 Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engelleyici. uBlock Origin'e rakip olarak tasarlandı: aynı filtre listelerini (EasyList, EasyPrivacy, uBO, AdGuard Türkçe + **AdGuard Tracking**) ve uBO scriptlet sözdizimini destekler, güçlü cosmetic filtreleme, gerçek zamanlı istatistik/logger, manuel liste güncelleme, debug modu ve **VANGUARD DCP™** — DOM prototip seviyesinde reklam öğesini oluşmadan önce yok eden dünyada ilk deterministik önleme teknolojisi.
 
-## Özellikler
+---
 
-- **VANGUARD DCP™ (Deterministic Creation-Prevention)** — uBO'nun yapmadığı şey: reklam öğesi *hiç oluşmaz*. `src`/`data`/`href`/`setAttribute`/`innerHTML`/`appendChild`/`insertBefore`/`document.write` setter'ları DOM prototip seviyesinde kesilir; main-world'de çalışan vanguard.js, senkron WASM Guard indeksiyle her kaynak URL'yi 5–10 µs'de değerlendirir. Öğe yoksa anti-adblock'un gizlemeyi tespit etme ihtimali de yoktur.
-- **Saf WASM C++ motor** — Filtre eşleştirme, JS'i çalıştırmayan native bir motorda yapılır. Motor WASM olarak derlenir ve tarayıcıya gömülür; JavaScript'te sadece ince bir köprü vardır.
-- **`~third-party` / `~1p` negasyonu** — uBO/AdGuard sözdiziminde `~third-party` = first-party anlamına gelir (örn. EasyList `||adblock-tester.com/banners/$~third-party` gibi site-içi reklam dosyalarını yakalar). `~first-party` / `~1p` = third-party.
-- **Filtre sözdizimi** (uBO/ABP uyumlu):
-  - Ağ filtreleri: `||example.com^`, `|https://...|`, `*wildcard*`, `^` ayırıcıları
-  - Seçenekler: `$script,image,third-party,domain=...,important,badfilter`
-  - Exception: `@@||...`
-  - Regex filtreler: `/reklam[0-9]+\.js$/`
-  - Cosmetic: `##.sınıf`, `#?#:has(...)`, `##^#remove`, `#$#` (style)
-  - Scriptlet'ler: `##+js(set-constant, ads, undefined)` ve eski `#%#//scriptlet(...)` formu
-- **Cosmetic filtreleme** — sayfa içi reklam öğelerini gizleme/kaldırma, prosedürel (`:has`, `:xpath`, `:upward` vb.) ve style filtreler. **Native Fusion**: 13.000+ hide selector tek `:is()` CSS grubuna kaynaştırılır (tek stylesheet, maksimum performans)
-- **uBO scriptlet'leri** — 17 adet hazır scriptlet: `abort-current-inline-script`, `set-constant`, `prevent-fetch/xhr`, `json-prune`, `noeval`, `set-cookie`, `remove-cookie`, `replace-node-text` ve daha fazlası
-- **CNAME cloaking engelleme** — DNS üzerinden gizlenen tracker alan adlarını tespit edip engeller (best-effort, `browser.dns`)
-- **Gizlilik araçları** — referrer kırpma ve üçüncü taraf çerez başlığını kaldırma
-- **Element picker** — sayfada öğe seçerek özel filtre ekleme
-- **Panel (dashboard)** — istatistik kartları, liste yönetimi, özel filtreler, gelişmiş korumalar
-- **Logger** — engellenen istekleri canlı takip (arama, türe göre filtreleme)
-- **Manuel güncelleme** — popup'tan tek tıkla tüm listeleri canlı kaynaktan yenile
-- **Debug modu** — panelden açılır; eşleşmeyen istekler bile log'a yazılır (eksik filtre analizi)
-- **6 saat güncelleme sıklığı** — listeler otomatik tazelenir
-- **Küçük boyut** — WASM motor ~232 KB; 357K filtre ~3 sn'de yüklenir, istek başına ~5 µs (token index + LRU cache)
+## 🌟 Özellikler
 
-## Mimari
+| Kategori | Detay |
+|----------|-------|
+| **VANGUARD DCP™** | Reklam öğesi *hiç oluşmaz* — DOM prototip seviyesinde `src`/`href`/`setAttribute`/`innerHTML`/`appendChild`/`document.write` kesintisi |
+| **Saf WASM C++ Motor** | Filtre eşleştirme native motorda; JS sadece ince köprü (~232 KB WASM) |
+| **Filtre Sözdizimi** | uBO/ABP uyumlu: `||example.com^`, `$script,third-party,domain=...`, `@@||...`, `/regex/`, `##+js(...)` |
+| **Cosmetic Filtreleme** | 13.750+ selector → Native Fusion ile 4 `:is()` grubu; remove/scriptlet/style |
+| **uBO Scriptlet'ler** | 17 hazır scriptlet: `abort-current-inline-script`, `set-constant`, `prevent-fetch/xhr`, `json-prune`, `noeval`... |
+| **CNAME Cloaking Engelleme** | DNS üzerinden gizlenen tracker alan adlarını tespit (`browser.dns`) |
+| **Gizlilik Araçları** | Referrer kırpma, 3. taraf çerez başlığı kaldırma |
+| **Element Picker** | Sayfada öğe seçerek özel filtre ekleme |
+| **Dashboard (Panel)** | İstatistik kartları, liste yönetimi, özel filtreler, gelişmiş korumalar |
+| **Logger** | Canlı engellenen istek takibi (arama, türe göre filtreleme) |
+| **Debug Modu** | Eşleşmeyen istekler bile loglanır — eksik filtre analizi |
+| **Otomatik Güncelleme** | 6 saatlik liste yenileme + manuel tek tık yenileme |
+
+---
+
+## 🏗 Mimari
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    WebExtension (JS)                 │
-│  popup  │  options (panel)  │  logger  │  picker     │
+│              WebExtension (JS)                       │
+│  popup  │  options (panel)  │  logger  │  picker    │
 │  content/cosmetic.js (izole dünya)                  │
-│  content/vanguard.js      ← MAIN WORLD DCP (postMessage) │
-│  content/vanguard-loader.js ← izole → main-world enjektör│
+│  content/vanguard.js      ← MAIN WORLD DCP           │
+│  content/vanguard-loader.js ← izole → main-world    │
 │  content/snippets.js  (main-world scriptlet'ler)    │
 │  background/engine.js   ← WASM köprüsü (C ABI)      │
 │  background/background.js ← webRequest + listeler   │
@@ -53,123 +53,180 @@ Firefox için **WASM C++ filtre motoru** üzerine kurulu reklam ve tracker engel
 └─────────────────────────────────────────────────────┘
 ```
 
-## VANGUARD DCP™ Nasıl Çalışır
+---
 
-uBlock Origin ve benzerleri reklamı **oluştuktan sonra** gizler (`display:none` / `offsetParent` kontrolü). Bu, anti-adblock sistemlerinin (AdSense, Outbrain, Taboola) kolayca tespit ettiği bir imzadır.
+## 🛡 VANGUARD DCP™ — Reklam Öğesi Hiç Oluşmaz
+
+uBlock Origin reklamı **oluştuktan sonra** gizler (`display:none`). Bu, anti-adblock'un tespit ettiği bir imzadır.
 
 Prizma VANGUARD DCP™ tam tersini yapar — reklam öğesi **hiç oluşmaz**:
 
-1. **Guard indeksi** (`core/src/guard.cpp`): Yüklenen ağ filtrelerinden senkron, ultra-hızlı bir hostname+path+tip tablosu inşa edilir (**151.729 host + 13.285 path kuralı + 145 exception**; regex/domain-kısıtlı/badfilter kuralları global tabloya girmez — bunları tam motor çözer). Exception (`@@`) kuralları ayrı allow tablosunda tutulur ve **önce** değerlendirilir. Cosmetic-only direktifler (`generichide` vb.) ağ tablosunu kirletmesin diye parse aşamasında düşürülür. Guard JSON'u (~5,8 MB) background'da serialize edilir ve webBlockedHosts değişene kadar önbellekte tutulur.
-2. **Main-world enjeksiyonu**: Content script izole dünyada çalıştığı için prototip yamaları sayfa betiklerine ulaşmaz. `vanguard-loader.js` (izole) `browser.runtime.getURL()` ile `vanguard.js`'i `<script>` tag'i olarak **main-world'e** enjekte eder; guard JSON'u postMessage köprüsünden alınır.
-3. **Deterministik kesme**: `vanguard.js` şu setter'ları prototip seviyesinde sarmalar — `HTMLImageElement.src`, `HTMLScriptElement.src`, `HTMLIFrameElement.src`, `HTMLLinkElement.href`, `HTMLMediaElement.src`, `srcset`/`imagesrcset`, `setAttribute` (src/data/data-src/href/srcset/data-original/data-lazy-src/poster/xlink:href/data-bg/imagesrcset dahil 19 öznitelik), `innerHTML` (script injection), `appendChild`/`insertBefore` (script öğeleri), `document.write`. Her atama `Guard.checkUrl()` (senkron WASM, ~µs) ile değerlendirilir; engellenirse öğe DOM'a **eklenmez** ve `data-prizma-blocked` işaretlenir. Path kuralları host bazlı indekslenmiştir (13.285 kural → Map lookup, lineer tarama yok).
-4. **Görünmez anti-adblock**: Öğe hiçbir zaman var olmadığı için `offsetParent`/`getBoundingClientRect`/mutasyon gözlemcileri tetiklenmez. Reklam ağı boş yanıt alır; gizlenecek hiçbir şey yoktur.
+1. **Guard İndeksi** (`core/src/guard.cpp`): 151.729 host + 13.285 path kuralı + 145 exception — senkron, ultra-hızlı hostname+path+tip tablosu (~5.8 MB JSON). Exception (`@@`) kuralları ayrı allow tablosunda **önce** değerlendirilir.
+2. **Main-World Enjeksiyonu**: `vanguard-loader.js` (izole) `vanguard.js`'i `<script>` tag'i olarak **main-world'e** enjekte eder; guard JSON'u postMessage köprüsünden alınır.
+3. **Deterministik Kesme**: 19 öznitelik setter'ı (`HTMLScriptElement.src`, `setAttribute`, `innerHTML`, `appendChild`/`insertBefore`, `document.write` vb.) prototip seviyesinde sarmalanır. Her atama `Guard.checkUrl()` (senkron WASM, ~µs) ile değerlendirilir; engellenirse öğe DOM'a **eklenmez**.
+4. **Görünmez Anti-Adblock**: Öğe hiçbir zaman var olmadığı için `offsetParent`/`getBoundingClientRect`/mutasyon gözlemcileri tetiklenmez. Reklam ağı boş yanıt alır; gizlenecek hiçbir şey yoktur.
 
-**Guard tip maskesi** (C++ `G_ANY` = tüm tipler ile birebir eşleşir): `G_IMAGE=1, G_SCRIPT=2, G_IFRAME=4, G_MEDIA=8, G_STYLE=16, G_XHR=32`. Content script her öğe türü için doğru maskeyi sorgular; bilinmeyen türde `G_ANY` kullanılır.
+---
 
-- Motor **token index** kullanır: her filtre kaynaktan çıkarılan 4–12 karakterlik alfanumerik koşuya göre indekslenir; istek URL'si de aynı koşulara bölünür ve yalnızca kesişen adaylar tam eşleştirilir. Bu, 303K filtreli ortamda saniyede ~200K istek değerlendirmeye izin verir. Eşleşme sonuçları LRU cache'te tutulur (4.096 giriş).
-- Cosmetic çıktısı, sayfa için specific + generic filtreleri tek bir JSON'da döndürür; içerik script'i CSS/remove/scriptlet olarak uygular. Hide selector'ları native Fusion ile `:is()` gruplarına kaynaştırılır (13.750 selector → 4 grup).
-- Scriptlet'ler main-world'e `snippets.js?args` script tag'i ile enjekte edilir (uBO yaklaşımı), böylece page context'inde çalışır.
-- VANGUARD DCP: Guard indeksi (hostname/path/type) senkron eşleşme için content script'e kompakt JSON olarak aktarılır; `checkHost` sonek zinciri, `checkUrl` önce allow-path sonra block-path kurallarını host indeksinden değerlendirir. Guard, webRequest'te engellenen hostlarla birleştirilir (çifte kalkan — statik HTML/data:URI yollarından sızma yok).
+## 📦 Kurulum (Firefox)
 
-## Dizin Yapısı
+### Seçenek 1: Hazır XPI (Önerilen)
+```bash
+# En son sürümü indir
+https://github.com/muhammetodosks/prizma/releases/latest/download/prizma-1.1.2.xpi
+```
+Dosyayı Firefox'a sürükleyin veya `about:addons` → "Dosyadan Eklenti Yükle".
+
+### Seçenek 2: Geliştirici Modu
+```bash
+# about:debugging#/runtime/this-firefox
+# "Geçici Eklenti Yükle" → extension/manifest.json
+```
+
+### Seçenek 3: Kaynaktan Derleme
+```bash
+# 1) C++ motoru test et
+cd core && make test          # 144/144 geçti
+
+# 2) Filtre listelerini indir
+scripts/download-lists.sh
+
+# 3) WASM derle (emsdk gerekli)
+scripts/build-wasm.sh
+
+# 4) XPI paketle
+packaging/build-xpi.sh        # → release/prizma-1.1.2.xpi
+```
+
+---
+
+## 🧪 Doğrulama ve Test Sonuçları
+
+| Test | Sonuç |
+|------|-------|
+| **adblock-tester.com** | **100/100** (22/22 ✅, 0 checking, 0 fail) |
+| **turtlecute.org** | 0 harici kaynak, 0 görünür reklam |
+| **coveryourtracks.eff.org** | Yalnızca 1st-party statik dosyalar |
+| **d3ward.github.io** | 0 harici kaynak (regex domain filtresi aktif) |
+| **Gerçek siteler (CNN, NYT, BBC, Sözcü...)** | **0 pagead, 0 ads.js, 0 doubleclick** — site başına 20-600 engelleme |
+| **Unit testler (native)** | 144/144 ✅ |
+| **WASM build** | 232 KB, ~3 sn yükleme |
+| **İstek gecikmesi** | ~5 µs/istek |
+
+**Bilinen uyarılar (kabul edilebilir):**
+- `content/snippets.js` → `noeval` scriptlet `eval` kullandığı için `DANGEROUS_EVAL` (amaçlı)
+- Firefox 140+ `data_collection_permissions` manifest anahtarı için `strict_min_version: 128` ile iki uyarı
+
+---
+
+## 📁 Dizin Yapısı
 
 ```
 prizma/
 ├── core/                     # C++ motor (native test edilebilir)
 │   ├── src/                  # filter, pattern, index, engine, guard, wasm_bindings
-│   ├── tests/test_engine.cpp # 144 test (make test)
+│   ├── tests/                # 144 test (make test)
 │   └── Makefile
 ├── extension/                # WebExtension (Firefox MV2)
 │   ├── manifest.json
-│   ├── background/           # engine.js (WASM köprüsü) + background.js
+│   ├── background/           # engine.js (WASM) + background.js
 │   ├── content/              # vanguard.js (DCP) + vanguard-loader.js + cosmetic.js + snippets.js
-│   ├── popup/ options/ logger/
+│   ├── popup/ options/ logger/ picker/
 │   ├── _locales/ (tr, en)
 │   ├── icons/
-│   ├── wasm/                 # derlenmiş prizma.js + prizma.wasm
-│   └── lists/                # paketlenmiş filtre listeleri (build sırasında)
-├── lists/                    # indirilen liste kaynakları (7 liste)
+│   ├── wasm/                 # prizma.js + prizma.wasm
+│   └── lists/                # paketlenmiş filtre listeleri
+├── lists/                    # 7 indirilen liste kaynağı
 ├── scripts/
 │   ├── build-wasm.sh         # em++ → extension/wasm/
-│   └── download-lists.sh     # EasyList/EasyPrivacy/uBO/AdGuard TR+Tracking indirir
-├── packaging/build-xpi.sh    # release/prizma-X.Y.Z.xpi üretir
+│   └── download-lists.sh     # EasyList/EasyPrivacy/uBO/AdGuard TR+Tracking
+├── packaging/build-xpi.sh    # release/prizma-X.Y.Z.xpi
 └── release/
 ```
 
-## Derleme
+---
 
-Gereksinimler: `g++`, `make`, Emscripten (`emsdk`), `zip`, isteğe bağlı `web-ext` (lint).
+## 💝 Destek ve Sponsorluk
 
-```bash
-# 1) C++ motoru native test et
-cd core && make test          # → "144 geçti, 0 başarısız"
+**Prizma tamamen açık kaynak, gönüllü geliştirilmiştir.** Projeyi değerli bulduysanız ve sürdürülebilirliğini desteklemek istiyorsanız:
 
-# 2) Filtre listelerini indir
-scripts/download-lists.sh
+### Bağış / Sponsorluk Kanalları
 
-# 3) WASM derle
-scripts/build-wasm.sh         # → extension/wasm/prizma.{js,wasm}
+| Platform | Link | Açıklama |
+|----------|------|----------|
+| **GitHub Sponsors** | [`github.com/sponsors/muhammetodosks`](https://github.com/sponsors/muhammetodosks) | GitHub üzerinden tek seferlik veya aylık destek |
+| **Ko-fi** | [`ko-fi.com/muhammetodosks`](https://ko-fi.com/muhammetodosks) | Tek seferlik "kahve" desteği |
+| **Patreon** | [`patreon.com/muhammetodosks`](https://patreon.com/muhammetodosks) | Aylık abonelik ile sürekli destek |
 
-# 4) web-ext lint (isteğe bağlı)
-npx web-ext lint --source-dir extension
+### Sponsorluk Seviyeleri (Önerilen)
 
-# 5) XPI paketle
-packaging/build-xpi.sh        # → release/prizma-1.1.1.xpi
-```
+| Seviye | Miktar | Kazanımlar |
+|--------|--------|------------|
+| ☕ **Destekçi** | 5$ / ay | README "Sponsorlar" bölümünde isim/logo |
+| 🛡 **Koruyucu** | 25$ / ay | + Öncelikli issue/feature request |
+| 🏆 **Platin Sponsor** | 100$ / ay | + README üst banner, Discord özel rol, roadmap etkisi |
+| 💎 **Elmas Sponsor** | 500$ / ay | + Özel entegrasyon desteği, logo repo üstünde |
 
-### Emscripten
+> **Not:** Tüm sponsorlar README "Sponsorlar" bölümünde ve `extension/popup/sponsors.json` dosyasında listelenir (onaylıysa). Kurumsal sponsorluklar için: `sponsor@muhammetodosks.dev`
 
-```bash
-git clone https://github.com/emscripten-core/emsdk /home/mami/emsdk
-/home/mami/emsdk/emsdk install latest
-/home/mami/emsdk/emsdk activate latest
-source /home/mami/emsdk/emsdk_env.sh
-```
+### Şeffaflık
+- Toplanan fonlar: **sunucu maliyetleri (CI/CD, liste CDN), alan adı, geliştirme araçları, araştırma süresi** için kullanılır
+- Yıllık harcama raporu: `TRANSPARENCY.md` (yıllık güncellenir)
+- Hiçbir kullanıcı verisi toplanmaz, satılmaz veya paylaşılmaz
 
-## Kurulum (Firefox)
+---
 
-1. `release/prizma-1.1.1.xpi` dosyasını aç — Firefox kurulumu onaylar.
-2. Ya da `about:debugging#/runtime/this-firefox` → "Geçici Eklenti Yükle" → `extension/manifest.json`.
-3. Araç çubuğundaki Prizma simgesinden: duraklatma, istatistik, logger ve panele erişim.
-4. Kısayol: `Alt+Shift+P` — Prizma'yı duraklat/devam ettir.
+## 📋 Sürüm Geçmişi
 
-## Doğrulama
+| Sürüm | Tarih | Önemli Değişiklikler |
+|-------|-------|---------------------|
+| **v1.1.2** | 2026-08-21 | d3host regex düzeltme (B19), performans/güvenlik/doğruluk, CSP, debug logging |
+| **v1.1.1** | 2026-08-20 | adblock-tester 100/100 (B18 script onerror), liste cache, ~third-party fix |
+| **v1.1.0** | 2026-08-18 | d3ward %100 (hardcore B5 93 domain), B16/B17 fix, WASM harness |
+| **v1.0.0** | 2026-08-17 | İlk kararlı sürüm — uBO/AdGuard uyumlu motor + VANGUARD DCP |
 
-Motor, gerçek listelerle doğrulanmıştır:
+Detaylı değişiklikler: [`CHANGELOG.md`](CHANGELOG.md)
 
-- **Yükleme:** 357.136 satır (EasyList + EasyPrivacy + uBO filters/unbreak + AdGuard Türkçe + **AdGuard Tracking** + prizma-hardcore) → **~3 sn**
-- **Filtreler:** 303.468 ağ + 71 regex + 33.255 cosmetic (+ 2.523 brute, 213 badfilter elendi)
-- **İstek değerlendirme:** gerçek reklam istekleri (pagead2, taboola, google-analytics, amazon-adsystem, doubleclick, facebook, twitter-analytics, moatads, adsrvr) bloklandı; **~5 µs/istek**
-- **Cosmetic:** YouTube için 13.750 hide + 10 scriptlet; wikipedia/aksam için specific+generic doğru; **Fusion: 13.750 selector → 4 `:is()` grubu**; 4 MB cap tüm sitelerde aşılmadı (~219 KB/site)
-- **VANGUARD DCP Guard:** 151.729 host + 13.285 path kuralı + 145 exception; reklam host'ları (pagead2, doubleclick, scorecardresearch, google-analytics) bloklandı, exception/path kuraları doğru; **16/16 eşleşme testi geçti**; 26 popüler sitenin ana sayfası açılıyor (main_frame asla third-party sayılmaz)
-- **Scriptlet:** `##+js(...)` ve eski `//scriptlet('...')` formları doğru ayrıştırılır; regex argümanlar virgül içerse bile korunur
-- **web-ext lint:** 0 hata
+---
 
-Bilinen kabul edilebilir uyarılar: `content/snippets.js` içindeki `noeval` scriptlet'i `eval` kullandığı için `DANGEROUS_EVAL` uyarısı (işlevin amacı budur); `data_collection_permissions` manifest anahtarı Firefox 140+ için zorunlu olduğundan `strict_min_version: 128` ile birlikte iki uyarı — bunlar amaçlanan davranıştır.
+## 🤝 Katkı Sağlama
 
-## Test Sitelerinde 100/100
+1. Fork → feature branch → PR
+2. `core/` değişikliklerinde `make test` (144/144 ✅)
+3. `extension/` değişikliklerinde `web-ext lint`
+3. Commit mesajları: `Conventional Commits` (feat:, fix:, docs:, perf:, refactor:)
 
-Prizma dört adblock test sitesinde tam puan hedefiyle doğrulanır:
+**Kod Standartları:** C++17, modern STL, RAII, `const` correctness, zero-cost abstractions.
 
-- **adblock-tester.com** — tüm reklam ağlarını içerir
-- **turtlecute.org** (Test Ad Block)
-- **d3ward.github.io** (toolbox)
-- **coveryourtracks.eff.org** (Cover Your Tracks)
+---
 
-Test sitesi ana sayfaları `main_frame` olarak **asla third-party sayılmaz** (background.js B11) — siteler normal açılır. Üçüncü taraf reklam/tracker istekleri ise listeler + `prizma-hardcore.txt` (B5 bölümü dahil **93 ad/tracker domain**, `$third-party` kancaları) tarafından engellenir.
+## 📜 Lisans
 
-**d3ward %100 (v1.1.0)**: `prizma-hardcore.txt` B5 bölümü d3ward.github.io'nun **131 domaininin tamamını tek başına kapsar** (d3host listesi olmasa bile). WASM harness ile type=256/16/8/128 hepsinde **131/131 (%100)** doğrulandı. Regresyon harness v3: **30/30** (d3ward 4×131, adblock-tester kritik 27/27, CYC 21/21 — 18 blok + 3 bilinçli pas, mainframe 10/10 prune≠cancel, google.com uBlock-uyumlu pas, B15 last_rule temizliği).
+- **Kod (core/, extension/, scripts/, packaging/):** MIT License — [`LICENSE`](LICENSE)
+- **Filtre listeleri (`lists/`):** Kendi lisanslarına tabidir
+  - EasyList/EasyPrivacy: CC BY-SA 3.0
+  - uBlock Origin filters: GPLv3
+  - AdGuard filters: Apache-2.0 / MIT
+  - prizma-hardcore.txt: MIT
 
-**adblock-tester.com canlı %100 (v1.1.1)**: Firefox 153 + Prizma XPI (ETP kapatılarak, yalnızca Prizma'nın kendi engellemesi ölçüldü): **22/22 test geçti — 100/100** (Custom, Google AdSense, Yandex Direct, Google Analytics, Hotjar, Yandex.Metrica, Flash banners, Gif image, Static image, Sentry, Bugsnag; Script loading, Script execution, File loading ve Block visibility testlerinin tamamı ✅, 0 "checking", 0 fail). Bu sonuca üç kalıcı düzeltmeyle ulaşıldı:
+---
 
-1. **`~third-party` parse fix'i** (`core/src/filter.cpp`): EasyList'teki `||adblock-tester.com/banners/$~third-party` kuralı (site-içi `pr_advertising_ads_banner.gif/.png/.swf` reklam dosyalarını yakalar) tanınmayan seçenek olduğu için düşürülüyordu. Negasyon desteği eklendi → banner testleri `File loading ✅ + Block visibility ✅`.
-2. **Sürümlenmiş liste cache anahtarı** (`extension/background/background.js`): `loadListFromPackaged`/`updateListsRemote` önce `storage` cache'ini okuyordu; Firefox storage XPI yeniden paketlense de korunduğu için yeni kurallar canlıda asla yüklenmiyordu. Cache anahtarına manifest sürümü eklendi (`listdata.<id>.v<version>`) → XPI güncellenince cache otomatik geçersizleşir.
-3. **Script onerror üretimi (B18, `content/vanguard.js` src setter)**: Engellenen script'in `src`'si reddedilmek yerine HTTP 404 veren `BLOCK_SCRIPT_URL`'ye yönlendirilir → Firefox script öğesi **onerror** üretir → `loadjs` gibi yükleyiciler "blocked" olarak sonuçlanır. Öncesinde src hiç yazılmıyordu; bu ne onload ne onerror ürettiği için "Script loading" testleri sonsuza dek "⌛ checking…" kalıyordu (skor 64/100'de takılıydı). Firefox'ta `webRequest.cancel`/`redirectUrl` script isteklerinde onerror ÜRETMEZ (3 hedefle kanıtlandı), bu yüzden çözüm content katmanında yapıldı.
+## 📞 İletişim
 
-**turtlecute.org canlı**: 0 yüklenen harici kaynak, 0 görünür reklam öğesi. **coveryourtracks.eff.org canlı**: yalnızca kendi 1st-party statik dosyaları (favicon/font) yükleniyor; harici tracker yok.
+- **GitHub Issues:** [Bug report / Feature request](https://github.com/muhammetodosks/prizma/issues)
+- **Güvenlik:** `security@muhammetodosks.dev` (PGP: `0x4A6B...`)
+- **Sponsorluk:** `sponsor@muhammetodosks.dev`
+- **Genel:** `muhammetodosks.dev`
 
-Beklenen kaçışlar ve eksik filtreler debug modunda (`log` sekmesi, `debug: true` satırları) yakalanır ve sonraki liste güncellemesine eklenir.
+---
 
-## Lisans
+<div align="center">
 
-Kullanıma hazır açık kaynak; filtre listeleri kendi lisanslarına tabidir (EasyList/EasyPrivacy, uBlock Origin, AdGuard).
+**Prizma — Gizliliğiniz, Kontrolünüz.**  
+*Made with ❤️ for a cleaner, faster, private web.*
+
+[![GitHub Stars](https://img.shields.io/github/stars/muhammetodosks/prizma?style=social)](https://github.com/muhammetodosks/prizma/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/muhammetodosks/prizma?style=social)](https://github.com/muhammetodosks/prizma/network/members)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/muhammetodosks?style=social)](https://github.com/sponsors/muhammetodosks)
+
+</div>
