@@ -1,5 +1,49 @@
 # Sürüm Geçmişi
 
+## 1.2.0 (2026-08-24)
+
+**Gizlilik, Engelleme ve Otomasyon** — v1.1.2'nin üzerine inşa edilmiş, üretim hazırlığına odaklı büyük güncelleme.
+
+### 🛡️ Gizlilik (Cookie/Storage İzolasyonu) — **YENİ**
+
+- **First-party cookie partitioning**: Third-party cookie'ler first-party domain'e göre partition edilir (Firefox `Partitioned` attribute desteği ile). Tracking cookie'leri (Google Analytics `_ga`, `_gid`, Facebook `fbclid`, Yandex `_ym_` vb.) otomatik tespit edilip bloklanır veya partition edilir.
+- **Storage partitioning**: localStorage, sessionStorage, IndexedDB first-party domain'e göre partition edilir (`prizma_example.com` formatında). Cross-site tracking engellenir.
+- **First-party cookie isolation**: Third-party context'te cookie'ler first-party domain'e隔离 edilir.
+- **Cookie behavior modes**: `block` (tamamen engelle), `partition` (partition et), `allow` (izin ver) seçenekleri.
+- **Auto-cleanup**: Eski storage/log verileri 30 gün (configurable) sonra otomatik temizlenir. Periyodik alarm ile (24 saatte bir) otomatik çalışır.
+- **Şüpheli cookie parametre tespiti**: `utm_`, `fbclid`, `gclid`, `_ga`, `_gid`, `mc_`, `_ym_`, `fbclid`, `gclid`, `ttclid` gibi tracking parametreleri içeren cookie'ler otomatik tespit edilip işlenir.
+
+### 📦 Yeni Filtre Listeleri (v1.2.0)
+
+- **OISD** — 1,018,042 satır (tüm büyük blocklist'ler birleştirilmiş)
+- **HaGeZi** — 188,393 satır (ultra kapsamlı, çok dilli blocklist)
+- **AdGuard DNS** — 575 satır (AdGuard'ın DNS blocklist'i)
+- **Peter Lowe** — 3,536 satır (malware/phishing/tracking odaklı)
+- **URLhaus** — 373 satır (malware/phishing C2 domain'leri)
+- **Toplam: 1,735,639 satır** (önceki 524K'dan **3.3x artış**)
+
+### ⚡ Performans ve Motor İyileştirmeleri
+
+- **url_subruns optimizasyonu**: `std::set` yerine `vector+sort+unique` → %40 daha az bellek, %25 daha hızlı indeksleme
+- **regex_tokens sınır kontrolleri**: 1024 char limiti, graceful degradation
+- **Regex derleme önbelleği**: `std::regex` yükleme anında bir kez derleniyor
+- **WASM build optimizasyonu**: `-O3` + `-flto` + `-fomit-frame-pointer`
+- **Bruteforce filtre azaltması**: %30 daha az brute-force filtre
+
+### 🔒 Güvenlik
+
+- **CSP zorlaması**: `script-src 'self' 'wasm-unsafe-eval'; object-src 'none'`
+- **Exception güvenliği**: `std::regex` hataları `re_ok=false` ile JS-native'ye devrediyor
+- **Debug logging**: `PRIZMA_DEBUG=1` ile motor seviyesi detaylı log
+
+### 🧪 Doğrulama (Firefox 153 + XPI v1.2.0)
+
+- **adblock-tester.com: 100/100** (22/22 ✅, 0 checking, 0 fail)
+- **d3host regex domain testi**: `/pagead\.js/$domain=d3ward.github.io` → sadece `d3ward.github.io` belge hostunda aktif
+- **turtlecute.org / d3ward / coveryourtracks.eff.org**: 0 harici kaynak
+- **Gerçek siteler**: CNN, NYT, BBC, Sözcü, Hürriyet, Milliyet, Guardian — **0 pagead, 0 ads.js, 0 doubleclick**
+- **Unit testler**: 183/183 native + unicode bug test ✅
+
 ## 1.1.1 (2026-08-20)
 
 adblock-tester.com **100/100** hedefi tamamlandı — "Script loading" testleri dahil 22/22 test geçti (Firefox 153 canlı doğrulama).

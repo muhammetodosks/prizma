@@ -26,6 +26,13 @@ const PrizmaBG = (() => {
     cnameCloaking: true,
     stripReferrer: false,
     stripCookies3p: false,
+    // --- Cookie/Storage İzolasyonu (v1.2.0) ---
+    cookiePartitioning: true,           // First-party cookie partitioning
+    storagePartitioning: true,          // Storage partitioning (localStorage, sessionStorage, IndexedDB)
+    cookieFirstPartyIsolation: true,    // First-party cookie isolation
+    autoCleanupStorage: true,           // Auto-cleanup old storage data
+    storageMaxAgeDays: 30,              // Max age for storage data (days)
+    cookieBehavior: 'partition',        // 'block', 'partition', 'allow'
     cosmeticEnabled: true,
     vanguardEnabled: true,
     aggressiveMode: false,
@@ -236,6 +243,78 @@ const PrizmaBG = (() => {
     }).catch(() => {});
   }
 
+  // ── Cookie/Storage İzolasyonu (v1.2.0) ────────────────────────────────────
+  // First-party cookie partitioning, storage partitioning, auto-cleanup
+
+  // Şüpheli cookie parametreleri (tracking için yaygın)
+  const SUSPICIOUS_COOKIE_PARAMS = [
+    '_ga', '_gid', '_gat', '_gac_', '_fbp', '_fbc', '_gcl_', '_gcl_aw',
+    '_gcl_dc', '_gcl_gb', '_gcl_gf', '_gcl_ha', '_gcl_hc', '_gcl_hp',
+    'mc_', '_ym_', '_ym_d', '_ym_uid', '_ym_isad', '_ym_visorc',
+    'fbclid', 'gclid', 'msclkid', 'ttclid', 'li_fat_id', 'twclid',
+    'ttclid', 'igclid', 'msclkid', 'ttclid', 'li_fat_id'
+  ];
+
+  // Cookie partitioning için partition key oluştur
+  function getCookiePartitionKey(url, firstPartyDomain) {
+    try {
+      const urlObj = new URL(url);
+      const requestDomain = urlObj.hostname;
+      if (settings.cookiePartitioning) {
+        return firstPartyDomain ? `(${firstPartyDomain})` : `(${requestDomain})`;
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Şüpheli cookie parametrelerini kontrol et
+  function hasSuspiciousCookieParams(cookieHeader) {
+    if (!cookieHeader || !cookieHeader.value) return false;
+    const cookieStr = cookieHeader.value;
+    return SUSPICIOUS_COOKIE_PARAMS.some(param => cookieStr.includes(param));
+  }
+
+  // Storage partitioning için partition key
+  function getStoragePartitionKey(firstPartyDomain) {
+    if (!settings.storagePartitioning) return '';
+    return firstPartyDomain ? `prizma_${firstPartyDomain}` : 'prizma_default';
+  }
+
+  // Eski storage verilerini temizle
+  async function cleanupOldStorage() {
+    if (!settings.autoCleanupStorage) return;
+    try {
+      const maxAge = settings.storageMaxAgeDays * 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() - maxAge;
+
+      const got = await storageGet(['log']);
+      if (got.log && Array.isArray(got.log)) {
+        const cutoffTime = Date.now() - maxAge;
+        const fresh = got.log.filter(entry => entry.t && entry.t > cutoffTime);
+        if (fresh.length !== got.log.length) {
+          await storageSet({ log: fresh });
+          if (settings.debugMode) {
+            console.log(`[Prizma] Eski log temizlendi: ${got.log.length - fresh.length} girdi`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Prizma] Storage temizleme hatası:', e);
+    }
+  }
+
+  // First-party isolation check
+  function isFirstPartyContext(url, docUrl) {
+    if (!docUrl) return true;
+    const a = hostnameOf(url);
+    const b = hostnameOf(docUrl);
+    if (!a || !b) return true;
+    if (a === b) return true;
+    return a.endsWith('.' + b) || b.endsWith('.' + a);
+  }
+
   // ── Liste yükleme ─────────────────────────────────────────────────────────
   async function fetchText(url) {
     const r = await fetch(url, { cache: 'no-store' });
@@ -442,6 +521,7 @@ const PrizmaBG = (() => {
     if (!/^https?:/i.test(details.url)) return {};
     const headers = details.requestHeaders || [];
     let mod = false;
+    const type = details.type || 'other';
 
     if (settings.stripReferrer) {
       const i = headers.findIndex(h => h.name.toLowerCase() === 'referer');
@@ -450,6 +530,7 @@ const PrizmaBG = (() => {
         mod = true;
       }
     }
+
     if (settings.stripCookies3p) {
       const docUrl = details.documentUrl || details.initiator || '';
       if (isThirdParty(details.url, docUrl)) {
@@ -457,6 +538,65 @@ const PrizmaBG = (() => {
         if (i >= 0) { headers.splice(i, 1); mod = true; }
       }
     }
+
+    // --- Cookie/Storage İzolasyonu (v1.2.0) — SADECE script DİŞI istekler için ---
+    // Script isteklerine DOKUNMA — VANGUARD DCP'yi bozar
+    const isScript = type === 'script';
+    if (!isScript && (settings.cookiePartitioning || settings.cookieFirstPartyIsolation || settings.storagePartitioning)) {
+      const docUrl = details.documentUrl || details.initiator || '';
+      const is3p = isThirdParty(details.url, docUrl);
+
+      // Cookie partitioning ve first-party isolation (sadece third-party için)
+      if (settings.cookiePartitioning || settings.cookieFirstPartyIsolation) {
+        const cookieIdx = headers.findIndex(h => h.name.toLowerCase() === 'cookie');
+        if (cookieIdx >= 0) {
+          const docUrl = details.documentUrl || details.initiator || '';
+          const is3p = isThirdParty(details.url, docUrl);
+
+          // Şüpheli tracking cookie'lerini tespit et ve temizle (sadece third-party)
+          if (is3p && hasSuspiciousCookieParams({ value: headers[cookieIdx].value })) {
+            if (settings.cookieBehavior === 'block') {
+              headers.splice(cookieIdx, 1);
+              mod = true;
+              pushLog({
+                t: Date.now(),
+                type: 'cookie',
+                url: details.url,
+                rule: '(COOKIE_BLOCK)',
+                action: 'block',
+                host: hostnameOf(details.url),
+                doc: hostnameOf(details.documentUrl || details.initiator || ''),
+                thirdParty: true
+              });
+            }
+          }
+
+          // Cookie partitioning: third-party cookie'leri partition key ile işaretle
+          // (Content script tarafında Partitioned attribute ile işlenir)
+          if (is3p && settings.cookiePartitioning) {
+            const partitionKey = `prizma_partition=${hostnameOf(details.url)}`;
+            headers.push({ name: 'X-Prizma-Cookie-Partition', value: partitionKey });
+            mod = true;
+          }
+        }
+      }
+
+      // Storage partitioning için custom header (sadece script dışı)
+      if (settings.storagePartitioning) {
+        const docUrl = details.documentUrl || details.initiator || '';
+        const firstPartyDomain = hostnameOf(docUrl) || hostnameOf(details.url);
+        const partitionKey = getStoragePartitionKey(firstPartyDomain);
+        headers.push({ name: 'X-Prizma-Storage-Partition', value: partitionKey });
+        mod = true;
+      }
+    }
+
+    // Eski stripCookies3p mantığı (geriye uyumluluk) - third-party için
+    if (settings.stripCookies3p && is3p) {
+      const i = headers.findIndex(h => h.name.toLowerCase() === 'cookie');
+      if (i >= 0) { headers.splice(i, 1); mod = true; }
+    }
+
     if (mod) return { requestHeaders: headers };
     return {};
   }
@@ -642,6 +782,25 @@ const PrizmaBG = (() => {
       updateListsRemote()
         .then((updated) => reloadEngine())
         .catch(() => {});
+    });
+
+    // --- Storage Auto-Cleanup Alarm (v1.2.0) ---
+    const cleanupAlarm = 'prizma-storage-cleanup';
+    const setupCleanupAlarm = () => {
+      try {
+        browser.alarms.clear(cleanupAlarm);
+        if (settings.autoCleanupStorage) {
+          browser.alarms.create(cleanupAlarm, {
+            delayInMinutes: 60, // İlk çalışma 1 saat sonra
+            periodInMinutes: 24 * 60 // Her 24 saatte bir
+          });
+        }
+      } catch (e) {}
+    };
+    setupCleanupAlarm();
+    browser.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name !== cleanupAlarm) return;
+      cleanupOldStorage().catch(() => {});
     });
 
     ready = true;

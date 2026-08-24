@@ -49,5 +49,17 @@ fetch ublock-quickfixes.txt "https://raw.githubusercontent.com/uBlockOrigin/uAss
 fetch ublock-resabuse.txt   "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt"
 fetch ublock-legacy.txt     "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/legacy.txt"
 
+# --- YENİ GÜÇLÜ LİSTELER (v1.2.0) ---
+# OISD — Tüm büyük blocklist'leri birleştirilmiş, optimize edilmiş liste (hosts formatı)
+fetch oisd.txt              "https://raw.githubusercontent.com/EagleOne42/oisd/main/hosts_full.txt"
+# HaGeZi — Ultra kapsamlı, çok dilli, çok katmanlı blocklist (adblock formatı)
+fetch hagezi.txt            "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/multi.txt"
+# AdGuard DNS — AdGuard'ın kendi DNS blocklist'i (rules formatı)
+fetch adguard-dns.txt       "https://raw.githubusercontent.com/AdguardTeam/AdGuardSDNSFilter/master/Filters/rules.txt"
+# Peter Lowe — Eski ama güçlü, malware/phishing/tracking odaklı
+fetch peterlowe.txt         "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&mimetype=plaintext"
+# URLhaus — Malware/phishing C2 domain'leri (abuse.ch)
+fetch urlhaus.txt           "https://urlhaus.abuse.ch/downloads/hostfile/"
+
 echo
-echo "Toplam: $(cat "$LISTS"/easylist.txt "$LISTS"/easyprivacy.txt "$LISTS"/ublock-filters.txt "$LISTS"/ublock-unbreak.txt "$LISTS"/adguard-turkish.txt "$LISTS"/adguard-tracking.txt "$LISTS"/d3host.txt "$LISTS"/ublock-filters-*.txt "$LISTS"/ublock-general.txt "$LISTS"/ublock-mobile.txt "$LISTS"/ublock-privacy.txt "$LISTS"/ublock-quickfixes.txt "$LISTS"/ublock-resabuse.txt "$LISTS"/ublock-legacy.txt 2>/dev/null | wc -l) satır"
+echo "Toplam: $(cat "$LISTS"/easylist.txt "$LISTS"/easyprivacy.txt "$LISTS"/ublock-filters.txt "$LISTS"/ublock-unbreak.txt "$LISTS"/adguard-turkish.txt "$LISTS"/adguard-tracking.txt "$LISTS"/d3host.txt "$LISTS"/ublock-filters-*.txt "$LISTS"/ublock-general.txt "$LISTS"/ublock-mobile.txt "$LISTS"/ublock-privacy.txt "$LISTS"/ublock-quickfixes.txt "$LISTS"/ublock-resabuse.txt "$LISTS"/ublock-legacy.txt "$LISTS"/oisd.txt "$LISTS"/hagezi.txt "$LISTS"/adguard-dns.txt "$LISTS"/peterlowe.txt "$LISTS"/urlhaus.txt 2>/dev/null | wc -l) satır"
