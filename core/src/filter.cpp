@@ -418,6 +418,10 @@ ParseResult parse_line(const std::string& line_in, uint32_t next_id) {
         } else if (opt == "denyallow") {
           // yok say
         } else if (opt == "noop" || opt == "all" || opt == "popunder" || opt == "popup") {
+          // yok say
+        } else if (opt == "cosmetic") {
+          // $cosmetic seçeneği: bu domain için TÜM cosmetic filtreleri devre dışı
+          nf.is_cosmetic_exception = true;
           if (opt == "popup") type_bits |= T_OTHER;  // popup engelleme: diğer olarak
         } else if (opt == "genericblock" || opt == "generichide" || opt == "inline-script" || opt == "inline-font" || opt == "strict1p" || opt == "strict3p") {
           // ağ engelleme yok — yalnızca özel direktif

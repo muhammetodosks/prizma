@@ -498,6 +498,28 @@ void Engine::append_json_escape(std::string& out, const std::string& s) const {
 std::string Engine::cosmetic_json(const std::string& hostname_in) const {
   const std::string hostname = to_lower_ascii(hostname_in);
 
+  // $cosmetic exception check: if there's a network filter exception with
+  // is_cosmetic_exception for this hostname (or its parent domains),
+  // return empty cosmetic filters — $cosmetic disables ALL cosmetic filters.
+  for (const auto& nf : nets_) {
+    if (!nf.is_exception || !nf.is_cosmetic_exception) continue;
+    if (check_domains(nf.domains, hostname)) {
+      return "{\"hide\":[],\"remove\":[],\"style\":[],\"scriptlet\":[],\"procedural\":[]}";
+    }
+  }
+  for (const auto& nf : brute_) {
+    if (!nf.is_exception || !nf.is_cosmetic_exception) continue;
+    if (check_domains(nf.domains, hostname)) {
+      return "{\"hide\":[],\"remove\":[],\"style\":[],\"scriptlet\":[],\"procedural\":[]}";
+    }
+  }
+  for (const auto& rf : regexes_) {
+    if (!rf.is_exception || !rf.is_cosmetic_exception) continue;
+    if (check_domains(rf.domains, hostname)) {
+      return "{\"hide\":[],\"remove\":[],\"style\":[],\"scriptlet\":[],\"procedural\":[]}";
+    }
+  }
+
   std::vector<const CosmeticFilter*> specific;
   std::vector<const CosmeticFilter*> generic;
   collect_cosmetic(specific, hostname, false);

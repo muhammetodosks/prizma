@@ -117,6 +117,7 @@ class Engine {
     std::string token;
     std::regex re;      // load_list'te bir kez derlenir (performans)
     bool re_ok = false; // derleme başarılı mı? (false → JS tarafına devreder)
+    bool is_cosmetic_exception = false; // $cosmetic seçeneği
   };
 
   // ── Heuristik/Dinamik Kural Yapıları (v1.2.0) ─────────────────────────────

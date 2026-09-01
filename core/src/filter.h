@@ -68,6 +68,7 @@ struct NetworkFilter {
   bool match_case = false;         // match-case seçeneği
   bool has_remove_param = false;   // $removeparam / $queryprune seçeneği
   bool has_party = false;
+  bool is_cosmetic_exception = false; // $cosmetic seçeneği
   uint32_t type_bits = 0;          // 0 = tüm tipler
   uint8_t party = P_ANY;           // P_THIRD / P_FIRST
   std::vector<DomainRule> domains; // doku domain kısıtları (boş = yok)

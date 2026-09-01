@@ -514,3 +514,57 @@
 ##[class^="ad-"]
 ##[class^="ads-"]
 ##[class^="banner-"]
+! ─── EXCEPTIONS: Major Platform Allowlist (v1.2.0) ───
+! YouTube — allow legitimate UI components
+@@||youtube.com^$generichide
+@@||youtube-nocookie.com^$generichide
+@@||youtube.com^$cosmetic
+@@||youtube-nocookie.com^$cosmetic
+@@||googlevideo.com^$cosmetic
+@@||ytimg.com^$cosmetic
+@@||yt3.ggpht.com^$cosmetic
+@@||i.ytimg.com^$cosmetic
+
+! TikTok — allow legitimate UI components
+@@||tiktok.com^$generichide
+@@||tiktok.com^$cosmetic
+@@||tiktokcdn.com^$cosmetic
+@@||tiktokv.com^$cosmetic
+@@||musical.ly^$cosmetic
+
+! Twitter/X — allow legitimate UI components
+@@||x.com^$generichide
+@@||x.com^$cosmetic
+@@||twitter.com^$generichide
+@@||twitter.com^$cosmetic
+@@||t.co^$cosmetic
+@@||twimg.com^$cosmetic
+@@||abs.twimg.com^$cosmetic
+@@||pbs.twimg.com^$cosmetic
+@@||video.twimg.com^$cosmetic
+
+! Google/YouTube ecosystem — allow legitimate services
+@@||google.com^$generichide
+@@||google.com^$cosmetic
+@@||googleapis.com^$cosmetic
+@@||googleusercontent.com^$cosmetic
+@@||gstatic.com^$cosmetic
+@@||gvt1.com^$cosmetic
+@@||ggpht.com^$cosmetic
+
+! Meta/Facebook/Instagram — allow legitimate services
+@@||facebook.com^$generichide
+@@||facebook.com^$cosmetic
+@@||fbcdn.net^$cosmetic
+@@||fbsbx.com^$cosmetic
+@@||instagram.com^$generichide
+@@||instagram.com^$cosmetic
+@@||cdninstagram.com^$cosmetic
+
+! Other major platforms — allow legitimate UI
+@@||github.com^$generichide
+@@||github.com^$cosmetic
+@@||github.io^$cosmetic
+@@||cloudflare.com^$generichide
+@@||cloudflare.com^$cosmetic
+@@||cloudflare.net^$cosmetic
