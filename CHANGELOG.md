@@ -206,3 +206,27 @@ d3ward %100 hedefi tamamlandı — hardcore listesi tek başına 131/131 d3ward 
 - **turtlecute.org / d3ward / coveryourtracks.eff.org**: 0 harici kaynak (3 first-party font/favicon)
 - **Regresyon harness v4**: **217/217** native + WASM testleri geçti.
 
+
+## 1.2.1 (2026-09-01)
+
+**TikTok/YouTube/Twitter/X Arayüz Bozulmaları Kalıcı Düzeltildi** — HaGeZi, uBlock listelerindeki agresif cosmetic/ağ filtreleri, YouTube/TikTok/Twitter/X gibi büyük platformlarda meşru UI bileşenlerini engelliyordu (YouTube: 88 UI gizleniyordu, Twitter: 14 link engelleniyordu).
+
+### Çözüm (v1.2.1)
+
+- **prizma-hardcore.txt**: YouTube, TikTok, Twitter/X, Google, Meta, GitHub, Cloudflare gibi major platformlar için `@@||domain^$cosmetic` ve `@@||domain^$generichide` exception rules eklendi
+- **Filter Parser ($cosmetic desteği)**: `core/src/filter.cpp` — `$cosmetic` seçeneği parser'a eklendi (`nf.is_cosmetic_exception = true`)
+- **Engine API**: `core/src/engine.h/cpp` — `RegexFilter` struct'ına `is_cosmetic_exception` alanı, `Engine::cosmetic_json()` içinde `$cosmetic` exception kontrolü eklendi (tüm network filter listelerinde exception kontrolü)
+- **RegexFilter struct**: `is_cosmetic_exception` alanı eklendi
+
+**Sonuç**: YouTube/TikTok/Twitter/X arayüzleri artık normal çalışıyor, **adblock-tester.com 100/100 (22/22 ✅) korundu**.
+
+### Heuristik Motor Altyapısı (v1.3.0 için hazır)
+- `engine.h`: `HeuristicConfig`, `DomainHeuristics`, `dynamic_rules` API'leri hazır
+- `engine.cpp` implementasyonu v1.3.0'da tamamlanacak
+
+### Canlı Doğrulama (Firefox 153 + XPI v1.2.1)
+
+- **adblock-tester.com: 100/100** (22/22 ✅, 0 checking, 0 fail)
+- **YouTube/TikTok/Twitter/X**: Arayüz normal, 0 engellenen öğe
+- **Gerçek siteler**: CNN, NYT, BBC, Sözcü, Hürriyet, Milliyet, Guardian — 0 pagead, 0 ads.js, 0 doubleclick
+- **Unit testler**: 183/183 native + unicode bug test ✅
