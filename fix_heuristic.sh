@@ -1,0 +1,211 @@
+#!/bin/bash
+# Fix heuristic engine implementation in engine.cpp
+
+# Read the file
+content=$(cat core/src/engine.cpp)
+
+# Find the first namespace end
+first_ns_end=$(echo "$content" | grep -b -o '}  // namespace prizma' | head -1 | cut -d: -f1)
+if [ -z "$first_ns_end" ]; then
+    echo "Could not find namespace end"
+    exit 1
+fi
+
+# Keep everything up to the first namespace end
+first_part="${content:0:$((first_ns_end + 23))}"
+
+# Heuristic implementations to add inside namespace
+heuristic_impl='
+// ─── Heuristik / Dinamik Kural Motoru Implementasyonu (v1.3.0) ────────────────
+
+int Engine::calculate_heuristic_score(const DomainHeuristics& h) const {
+  if (h.total_requests < heuristic_config_.min_requests_for_scoring) return 0;
+  
+  int score = 0;
+  
+  if (h.total_requests > 0) {
+    double tp_ratio = static_cast<double>(h.third_party_requests) / h.total_requests;
+    score += static_cast<int>(tp_ratio * 30);
+  }
+  
+  if (h.total_requests > 0) {
+    double active_ratio = static_cast<double>(h.script_requests + h.xhr_requests + h.fetch_requests) / h.total_requests;
+    score += static_cast<int>(active_ratio * 25);
+  }
+  
+  if (h.suspicious_params > 0) {
+    score += std::min(h.suspicious_params * 5, 20);
+  }
+  
+  if (h.unique_paths > 10) {
+    score += std::min((h.unique_paths - 10) / 2, 15);
+  }
+  
+  if (h.total_requests > 0) {
+    double block_ratio = static_cast<double>(h.blocked_requests) / h.total_requests;
+    if (block_ratio > 0.5) score += 10;
+  }
+  
+  return std::min(score, 100);
+}
+
+void Engine::update_domain_heuristics(const std::string& url, uint32_t type_bit,
+                                      const std::string& hostname,
+                                      const std::string& doc_hostname,
+                                      bool third_party) const {
+  if (hostname.empty()) return;
+  
+  auto& h = domain_heuristics_[hostname];
+  h.domain = hostname;
+  h.total_requests++;
+  h.last_seen = static_cast<int>(time(nullptr));
+  
+  switch (type_bit) {
+    case T_SCRIPT:   h.script_requests++; break;
+    case T_XHR:      h.xhr_requests++; break;
+    case T_FETCH:    h.fetch_requests++; break;
+    default: break;
+  }
+  
+  if (third_party) h.third_party_requests++;
+  
+  size_t path_start = url.find("/", url.find("://") + 3);
+  if (path_start != std::string::npos) {
+    std::string path = url.substr(path_start);
+    h.path_counts[path]++;
+    h.unique_paths = static_cast<int>(h.path_counts.size());
+  }
+  
+  static const std::vector<std::string> suspicious_params = {
+    "utm_", "fbclid", "gclid", "_ga", "_gid", "mc_", "_ym_", "_ga_",
+    "ref=", "source=", "medium=", "campaign=", "content=", "term=",
+    "click_id", "affiliate", "aff_id", "subid", "sub_id", "cid"
+  };
+  
+  size_t query_pos = url.find("?");
+  if (query_pos != std::string::npos) {
+    std::string query = url.substr(query_pos + 1);
+    for (const auto& param : suspicious_params) {
+      if (query.find(param) != std::string::npos) {
+        h.suspicious_params++;
+        break;
+      }
+    }
+  }
+  
+  h.heuristic_score = calculate_heuristic_score(h);
+  
+  if (heuristic_config_.auto_generate_rules && h.heuristic_score >= heuristic_config_.min_score_threshold) {
+    maybe_generate_dynamic_rule(hostname);
+  }
+  
+  int now = static_cast<int>(time(nullptr));
+  if (now - last_cleanup_time_ > 3600) {
+    cleanup_old_heuristics();
+    last_cleanup_time_ = now;
+  }
+}
+
+void Engine::maybe_generate_dynamic_rule(const std::string& domain) const {
+  auto it = domain_heuristics_.find(domain);
+  if (it == domain_heuristics_.end()) return;
+  
+  const auto& h = it->second;
+  if (h.heuristic_score < heuristic_config_.min_score_threshold) return;
+  
+  if (dynamic_rules_.find(domain) != dynamic_rules_.end()) return;
+  
+  if (static_cast<int>(dynamic_rules_.size()) >= heuristic_config_.max_tracked_domains) return;
+  
+  std::string rule = "||" + domain + "^$third-party,script,xmlhttprequest,fetch,important";
+  dynamic_rules_[domain] = rule;
+  
+  if (debug_enabled_) {
+    std::fprintf(stderr, "[PRIZMA HEURISTIC] Dynamic rule generated for %s (score: %d): %s\n",
+                 domain.c_str(), h.heuristic_score, rule.c_str());
+  }
+}
+
+void Engine::cleanup_old_heuristics() const {
+  int now = static_cast<int>(time(nullptr));
+  int window = heuristic_config_.request_window_sec;
+  
+  std::vector<std::string> to_remove;
+  for (const auto& [domain, h] : domain_heuristics_) {
+    if (now - h.last_seen > window * 24) {
+      to_remove.push_back(domain);
+    }
+  }
+  
+  for (const auto& domain : to_remove) {
+    domain_heuristics_.erase(domain);
+  }
+  
+  if (debug_enabled_ && !to_remove.empty()) {
+    std::fprintf(stderr, "[PRIZMA HEURISTIC] Cleaned up %zu old domain entries\n", to_remove.size());
+  }
+}
+
+void Engine::set_heuristic_config(const HeuristicConfig& config) {
+  heuristic_config_ = config;
+}
+
+std::string Engine::get_dynamic_rule_for_domain(const std::string& domain) const {
+  auto it = dynamic_rules_.find(domain);
+  if (it != dynamic_rules_.end()) return it->second;
+  return "";
+}
+
+std::string Engine::dynamic_rules_json() const {
+  std::string out;
+  out += "[";
+  bool first = true;
+  for (const auto& [domain, rule] : dynamic_rules_) {
+    if (!first) out += ",";
+    first = false;
+    out += "{\"domain\":\"";
+    append_json_escape(out, domain);
+    out += "\",\"rule\":\"";
+    append_json_escape(out, dynamic_rules_.at(domain));
+    out += "\"}";
+  }
+  out += "]";
+  return out;
+}
+
+std::string Engine::heuristic_stats_json() const {
+  std::string out;
+  out += "{\"tracked_domains\":";
+  out += std::to_string(domain_heuristics_.size());
+  out += ",\"dynamic_rules\":";
+  out += std::to_string(dynamic_rules_.size());
+  out += ",\"config\":{";
+  out += "\"min_score_threshold\":";
+  out += std::to_string(heuristic_config_.min_score_threshold);
+  out += ",\"max_tracked_domains\":";
+  out += std::to_string(heuristic_config_.max_tracked_domains);
+  out += "\"request_window_sec\":";
+  out += std::to_string(heuristic_config_.request_window_sec);
+  out += "\"min_requests_for_scoring\":";
+  out += std::to_string(heuristic_config_.min_requests_for_scoring);
+  out += "\"enable_ml_scoring\":";
+  out += heuristic_config_.enable_ml_scoring ? "true" : "false";
+  out += "\"auto_generate_rules\":";
+  out += heuristic_config_.auto_generate_rules ? "true" : "false";
+  out += "}}";
+  return out;
+}
+
+}  // namespace prizma'
+
+# Write the fixed file
+python3 -c "
+with open('core/src/engine.cpp', 'r') as f:
+    content = f.read()
+first_ns_end = content.find('}  // namespace prizma')
+first_part = content[:first_ns_end + 23]
+heuristic_impl = open('heuristic_impl.txt', 'r').read()
+with open('core/src/engine.cpp', 'w') as f:
+    f.write(first_part + heuristic_impl)
+print('Fixed engine.cpp')
+"

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">P</div>
+      <div>
+        <h1 id="title">Prizma</h1>
+        <span id="state" class="state active">Prizma etkin</span>
+      </div>
+    </div>
+    <label class="switch" title="Prizma'yı duraklat">
+      <input type="checkbox" id="pauseToggle">
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <div class="agg-row">
+    <label class="agg-label" for="aggressiveToggle" title="Tüm üçüncü taraf script/iframe/font/object isteklerini kurala bakmadan engelle">
+      Agresif mod
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="aggressiveToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="agg-warn" id="aggressiveWarn">
+    ⚠ Dikkat: Agresif modda üçüncü taraf script/iframe/font/object istekleri kurala bakılmadan engellenir. Bazı sitelerde işlevsellik bozulabilir.
+  </div>
+
+  <div class="agg-row">
+    <label class="agg-label" for="debugToggle" title="Hangi filtrelerin çalıştığını, hangi isteklerin engellendiğini/geçtiğini detaylı logla">
+      Debug modu
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="debugToggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <div class="agg-row update-row">
+    <button class="update-btn" id="btnUpdateLists" title="Tüm filtre listelerini sıfırdan indirip motoru yeniden başlat">
+      Listeleri Güncelle
+    </button>
+    <span class="update-state" id="updateState"></span>
+  </div>
+
+  <section class="cards">
+    <div class="card">
+      <div class="card-value" id="blockedTotal">0</div>
+      <div class="card-label">engellenen istek</div>
+    </div>
+    <div class="card">
+      <div class="card-value" id="filterCount">0</div>
+      <div class="card-label">filtre kuralı</div>
+    </div>
+    <div class="card">
+      <div class="card-value" id="sinceDays">0</div>
+      <div class="card-label">gündür aktif</div>
+    </div>
+  </section>
+
+  <section class="cards vanguard">
+    <div class="card shield">
+      <div class="card-value" id="guardHosts">0</div>
+      <div class="card-label">VANGUARD korumalı host</div>
+    </div>
+    <div class="card shield">
+      <div class="card-value" id="vanguardBlocked">0</div>
+      <div class="card-label">DCP önlenen öğe</div>
+    </div>
+  </section>
+
+  <section class="site">
+    <div class="site-title" id="siteName">Bu site</div>
+    <div class="site-btns" id="siteBtns">
+      <button class="site-btn" data-mode="normal">Engelle</button>
+      <button class="site-btn" data-mode="noop">İzin ver</button>
+      <button class="site-btn" data-mode="block">Agresif</button>
+    </div>
+  </section>
+
+  <nav>
+    <a href="#" id="btnLogger" class="nav-btn">Logger</a>
+    <a href="#" id="btnOptions" class="nav-btn">Panel</a>
+    <a href="#" id="btnSettings" class="nav-btn">Ayarlar</a>
+  </nav>
+
+  <script src="popup.js"></script>
+</body>
+</html>

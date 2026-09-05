@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Prizma — Logger</title>
+<link rel="stylesheet" href="logger.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">P</div>
+    <h1>Logger</h1>
+  </div>
+  <div class="tools">
+    <input id="search" type="search" placeholder="Ara (host, kural…)" autocomplete="off">
+    <select id="filterAction">
+      <option value="">Tümü</option>
+      <option value="block">Engellenen</option>
+      <option value="cname">CNAME</option>
+    </select>
+    <button id="btnClear" class="btn ghost">Temizle</button>
+  </div>
+</header>
+
+<div class="legend">
+  <span class="tag img">img</span><span class="tag scr">script</span><span class="tag xhr">xhr</span>
+  <span class="tag doc">doc</span><span class="tag css">css</span><span class="tag med">media</span>
+  <span class="tag oth">other</span>
+</div>
+
+<table id="logTable">
+  <thead>
+    <tr>
+      <th>Zaman</th><th>Tip</th><th>Host</th><th>Belge</th><th>3p</th><th>Kural</th>
+    </tr>
+  </thead>
+  <tbody id="logBody"></tbody>
+</table>
+
+<div id="empty" class="empty">Henüz kayıt yok.</div>
+
+<script src="logger.js"></script>
+</body>
+</html>

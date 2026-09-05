@@ -1,0 +1,1 @@
+// Prizma $redirect=noop.txt — boş metin kaynağı

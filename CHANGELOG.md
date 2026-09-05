@@ -230,3 +230,42 @@ d3ward %100 hedefi tamamlandı — hardcore listesi tek başına 131/131 d3ward 
 - **YouTube/TikTok/Twitter/X**: Arayüz normal, 0 engellenen öğe
 - **Gerçek siteler**: CNN, NYT, BBC, Sözcü, Hürriyet, Milliyet, Guardian — 0 pagead, 0 ads.js, 0 doubleclick
 - **Unit testler**: 183/183 native + unicode bug test ✅
+
+## 1.3.0 (2026-09-05)
+
+**Heuristik Motor (v1.3.0) — Tam Implementasyon** — Domain bazlı istek analizi, şüpheli parametre tespiti, otomatik dinamik kural üretimi.
+
+### Yeni Heuristik Motor (engine.cpp/h)
+- **DomainHeuristics yapısı**: Domain bazlı istek sayaçları (script/xhr/fetch/third-party), path çeşitliliği, şüpheli parametre sayacı, heuristik skor (0-100), son görülme zamanı
+- **HeuristicConfig**: min_score_threshold=70, max_tracked_domains=10000, request_window_sec=60, min_requests_for_scoring=3, enable_ml_scoring, auto_generate_rules
+- **Puanlama algoritması**: Third-party oranı (30p), script/xhr/fetch oranı (25p), şüpheli parametreler (20p), unique path (15p), blok oranı (10p) → Toplam 100
+- **Dinamik kural üretimi**: Skor ≥ 70 olan domainler için otomatik `||domain^$third-party,script,xmlhttprequest,fetch,important` kuralı üretilir
+- **Otomatik temizleme**: 24 saatlik pencere, saatlik cron ile eski veriler temizlenir
+- **API**: `set_heuristic_config`, `get_dynamic_rule_for_domain`, `dynamic_rules_json`, `heuristic_stats_json`
+- **Debug logging**: `PRIZMA_DEBUG=1` ile motor seviyesi detaylı log
+
+### Filtre Listeleri Güncellendi
+- OISD (1,018,042), HaGeZi (188,393), AdGuard DNS (575), Peter Lowe (3,536), URLhaus (373) eklendi
+- **Toplam: 1,738,857 satır** (3.3x artış)
+
+### Platform Desteği
+- **Chrome/Edge (MV3)**: Service worker, declarativeNetRequest, declarativeNetRequestWithHostAccess
+- **Safari**: Web Extension formatında, Xcode proje yapısı hazır
+- **Firefox (MV2)**: Mevcut XPI desteği devam ediyor
+
+### Geliştirme Araçları
+- `scripts/install.sh` — Tek komutla otomatik kurulum (tarayıcı auto-detect)
+- `scripts/test-comprehensive.sh` — Kapsamlı test paketi (adblock-tester, gerçek siteler, unit testler)
+- `INSTALL.md` — Tüm platformlar için kurulum rehberi, sponsorluk bilgileri
+- `scripts/test-comprehensive.sh` — adblock-tester, gerçek siteler, unit testler, performans
+
+### Canlı Doğrulama (Firefox 153 + XPI v1.3.0)
+- **adblock-tester.com: 97/100** (Flash banners testi çevresel nedenle ⚠️)
+- **YouTube/TikTok/Twitter/X**: 0 engellenen öğe, arayüz normal ✅
+- **Gerçek siteler (CNN, NYT, BBC, Sözcü, Hürriyet, Milliyet, Guardian)**: 0 pagead/ads.js/doubleclick ✅
+- **Unit testler**: 183/183 native + unicode ✅
+
+### Dağıtıma Hazır
+- **XPI v1.3.0**: `release/prizma-1.3.0.xpi` (13.5 MB)
+- **Git**: commit, tag `v1.3.0`, GitHub Release
+- **CHANGELOG v1.3.0**, `README.md`, `INSTALL.md` güncellendi

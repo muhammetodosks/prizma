@@ -1,0 +1,174 @@
+/* Prizma popup — koyu/açık otomatik (Karya DE uyumlu) */
+:root {
+  --accent: #7c4dff;
+  --accent-soft: rgba(124, 77, 255, 0.14);
+  --bg: #ffffff;
+  --bg-card: #f5f5f7;
+  --text: #1c1b22;
+  --text-dim: #6b6b76;
+  --border: #e2e2e8;
+  --danger: #e0393e;
+  --ok: #2e7d32;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #232627;
+    --bg-card: #2b2f30;
+    --text: #f0f0f0;
+    --text-dim: #9aa0a6;
+    --border: #3a3f41;
+    --danger: #ff6b6b;
+    --ok: #66bb6a;
+    --accent-soft: rgba(124, 77, 255, 0.25);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 300px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif;
+  padding: 12px;
+  transition: background .2s, color .2s;
+}
+
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), #b388ff);
+  color: #fff; font-weight: 700; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+h1 { font-size: 16px; font-weight: 600; }
+.state { font-size: 11px; color: var(--text-dim); }
+.state.active { color: var(--ok); }
+.state.paused { color: var(--danger); }
+
+/* switch */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--border); border-radius: 22px; transition: .2s;
+}
+.slider::before {
+  content: ""; position: absolute; width: 16px; height: 16px;
+  left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 6px; text-align: center;
+}
+.card-value { font-size: 17px; font-weight: 700; color: var(--accent); }
+.card-label { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+/* VANGUARD DCP™ kalkan kartları */
+.cards.vanguard { grid-template-columns: repeat(2, 1fr); margin-top: -4px; }
+.card.shield {
+  border-color: rgba(124, 77, 255, 0.35);
+  background: linear-gradient(160deg, var(--accent-soft), var(--bg-card) 70%);
+  position: relative;
+  overflow: hidden;
+}
+.card.shield::before {
+  content: "";
+  position: absolute; top: 8px; right: 8px;
+  width: 10px; height: 12px;
+  border: 2px solid rgba(179, 136, 255, 0.6);
+  border-radius: 50% 50% 50% 50% / 55% 55% 45% 45%;
+  pointer-events: none;
+}
+.card.shield::after {
+  content: "";
+  position: absolute; top: 13px; right: 11px;
+  width: 4px; height: 4px;
+  border: 1px solid rgba(179, 136, 255, 0.7);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.card.shield .card-value { color: #b388ff; }
+
+nav { display: grid; gap: 6px; }
+.nav-btn {
+  display: block; text-align: center; padding: 8px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text);
+  text-decoration: none; font-weight: 500;
+}
+.nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* FASE 4.2 — per-site kontrol */
+.site {
+  margin-top: 10px; padding: 8px 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.site-title {
+  font-size: 11px; color: var(--text-dim); margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.site-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.site-btn {
+  padding: 6px 4px; font-size: 11px; font-weight: 600;
+  border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); cursor: pointer;
+}
+.site-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.site-btn[data-mode="noop"].active { border-color: #4caf50; color: #4caf50; }
+.site-btn[data-mode="block"].active { border-color: #ff5252; color: #ff5252; background: rgba(255,82,82,0.1); }
+/* Agresif mod satırı */
+.agg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.agg-label {
+  font-weight: 600;
+  color: var(--danger);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Agresif mod uyarısı */
+.agg-warn {
+  display: none;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+/* P8 — Debug toggle satırı (agresif satırından ayrı görünüm) */
+#debugToggle + .slider { background: var(--border); }
+.agg-row:has(#debugToggle) .agg-label { color: var(--text); }
+/* P5 — Liste güncelleme butonu */
+.update-row {
+  margin-bottom: 10px;
+}
+.update-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.update-btn:hover { opacity: 0.85; }
+.update-btn:disabled { opacity: 0.5; cursor: wait; }
+.update-state { font-size: 11px; color: var(--text-dim); margin-left: 8px; white-space: nowrap; }
